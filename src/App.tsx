@@ -23,7 +23,6 @@ export default function App() {
   const hz        = useGridStore(s => s.hz);
   const steps     = useGridStore(s => s.stepCount);
   const cells     = useGridStore(s => s.grid.size);
-  const grid      = useGridStore(s => s.grid);
   const loadGrid  = useGridStore(s => s.loadGrid);
   const setRunning = useGridStore(s => s.setRunning);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -50,7 +49,18 @@ export default function App() {
   const handleSave = async () => {
     const camera = canvasRef.current?.getCameraSnapshot();
     if (!camera) return; // Canvas noch nicht bereit
-    const json = serialize(grid, camera);
+    // Speichern muss den ECHTEN Grid-Zustand exportieren: eine schwebende
+    // Selektion hat ihre Quelle geleert und den Inhalt nur im Speicher
+    // (siehe canvas/selection.ts) — ohne Commit würde eine .u3-Datei
+    // entstehen, die die Lücke zeigt, aber nicht den schwebenden Inhalt.
+    // useGridStore.getState() bewusst statt der oben gebundenen Closure-
+    // Variable: commitFloating() mutiert den Store synchron, der Render-
+    // Snapshot von oben zieht aber erst beim nächsten Render nach.
+    if (useSelectionStore.getState().selection.status === 'floating') {
+      useSelectionStore.getState().commitFloating();
+    }
+    const freshGrid = useGridStore.getState().grid;
+    const json = serialize(freshGrid, camera);
     try {
       await saveToFile(json, suggestedFilename(), 'Unit-3 Datei', { 'application/json': ['.u3'] });
     } catch {
@@ -71,7 +81,6 @@ export default function App() {
     setRunning(false);
     try {
       const { grid: loaded, camera } = deserialize(text);
-      useSelectionStore.getState().clearSelection();
       loadGrid(loaded);
       canvasRef.current?.setCameraSnapshot(camera);
     } catch (e) {
@@ -102,7 +111,7 @@ export default function App() {
         alert('Die Datei enthält keine gültigen Zellen — falsches Dateiformat gewählt?');
         return;
       }
-      useSelectionStore.getState().setClipboard(cells);
+      useSelectionStore.getState().setClipboardFromBuffer(cells);
     } catch (e) {
       const msg = e instanceof SerializeError ? e.message : 'Datei konnte nicht gelesen werden';
       alert(msg);

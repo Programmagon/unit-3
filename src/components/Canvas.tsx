@@ -7,7 +7,7 @@ import { PointerController } from '../canvas/input';
 import { zoomAtPoint, getCellAt } from '../canvas/coordinates';
 import type { Camera }       from '../canvas/coordinates';
 import type { Tool }         from '../canvas/input';
-import { cellsInRect } from '../canvas/selection';
+import type { SelectionState } from '../canvas/selection';
 
 // Kamera-Startwert — lebt als Ref, kein Zustand, keine React-Re-Renders
 const INITIAL_CAMERA: Camera = { x: -15, y: -9, zoom: 36 };
@@ -65,9 +65,6 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
     getViewportCenterCell: () => {
       const c = canvasRef.current;
       if (!c) return [0, 0];
-      // getCellAt erwartet Client-Koordinaten (wie e.clientX/Y) und rechnet
-      // intern über getBoundingClientRect() in Canvas-relative Koordinaten
-      // um — deshalb hier die Mitte des Bounding Rects, nicht clientWidth/2.
       const rect = c.getBoundingClientRect();
       return getCellAt(rect.left + rect.width / 2, rect.top + rect.height / 2, c, cameraRef.current);
     },
@@ -84,28 +81,22 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
   const gridRef      = useRef(grid);
   gridRef.current    = grid; // immer aktuell für Event-Handler
 
-  // ── Selektions-Drag (Live-Modell, siehe gridStore.ts/selectionOps.ts) ──
-  const beginSelectionDrag  = useGridStore(s => s.beginSelectionDrag);
-  const dragSelectionTo     = useGridStore(s => s.dragSelectionTo);
-  const endSelectionDrag    = useGridStore(s => s.endSelectionDrag);
-  const cancelSelectionDrag = useGridStore(s => s.cancelSelectionDrag);
-
   // ── Werkzeug ──────────────────────────────────────────────────────────
   const tool      = useUIStore(s => s.tool);
   const toolRef   = useRef<Tool | null>(tool);
   useEffect(() => { toolRef.current = tool; }, [tool]);
 
-  // ── Selektion ─────────────────────────────────────────────────────────
-  // `selected` ist IMMER die aktuelle, im Grid tatsächlich vorhandene
-  // Position — kein separater "pending"/Vorschau-Zustand mehr (siehe
-  // gridStore.dragSelectionTo, das Grid UND Selektion atomar zusammen hält).
-  const selected      = useSelectionStore(s => s.selected);
-  const setSelection  = useSelectionStore(s => s.setSelection);
-  const clearSelection = useSelectionStore(s => s.clearSelection);
-  const selectedRef   = useRef(selected);
-  selectedRef.current = selected; // immer aktuell für Event-Handler
-  /** Live-Vorschau beim Aufziehen eines neuen Rechtecks — rein visuell, kein Store-Update pro pointermove. */
-  const activeDragRectRef = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  // ── Selektion (State Machine, siehe canvas/selection.ts) ──────────────
+  const selection            = useSelectionStore(s => s.selection);
+  const resolvePointerDown   = useSelectionStore(s => s.resolvePointerDown);
+  const updateMarquee        = useSelectionStore(s => s.updateMarquee);
+  const finishMarquee        = useSelectionStore(s => s.finishMarquee);
+  const clearSelection       = useSelectionStore(s => s.clearSelection);
+  const beginFloatingDrag    = useSelectionStore(s => s.beginFloatingDrag);
+  const updateFloatingDrag   = useSelectionStore(s => s.updateFloatingDrag);
+  const interruptInteraction = useSelectionStore(s => s.interruptInteraction);
+  const selectionRef         = useRef<SelectionState>(selection);
+  selectionRef.current       = selection; // immer aktuell fürs Zeichnen
 
   // ── Zeichnen ──────────────────────────────────────────────────────────
   // Liest ausschließlich aus Refs — kein React-Kontext nötig.
@@ -115,9 +106,7 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     renderFrame(ctx, gridRef.current, cameraRef.current, c.clientWidth, c.clientHeight);
-    renderSelectionOverlay(
-      ctx, selectedRef.current, cameraRef.current, activeDragRectRef.current,
-    );
+    renderSelectionOverlay(ctx, selectionRef.current, cameraRef.current);
   }, []); // keine Deps — liest aus stabilen Refs
 
   // ── rAF-Loop ──────────────────────────────────────────────────────────
@@ -135,8 +124,9 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
 
   // Grid-Änderung (Zustand) → dirty markieren → rAF zeichnet nächsten Frame
   useEffect(() => { dirtyRef.current = true; }, [grid]);
-  // Selektions-Änderung (z. B. Esc, SelectionActions-Buttons, Drag-Schritte) → ebenfalls dirty
-  useEffect(() => { dirtyRef.current = true; }, [selected]);
+  // Selektions-Änderung (Marquee-Vorschau, Drehen/Spiegeln/Verschieben,
+  // Commit/Cancel, …) → ebenfalls dirty
+  useEffect(() => { dirtyRef.current = true; }, [selection]);
 
   // ── HiDPI-Resize ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -203,7 +193,8 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
         // Undo-Schritt sein, nicht einer pro Zelle. Deshalb hier einmalig
         // vor dem ersten Platzieren/Löschen pushUndo(), danach beginBatch()
         // — setCell/deleteCell/toggleForced überspringen pushUndo dann bis
-        // endBatch() beim Loslassen.
+        // endBatch() beim Loslassen. Betrifft nur Platzieren/Löschen — die
+        // Selektion braucht das nicht (siehe gridStore.ts batchActive-Doku).
         onDragStart: () => {
           pushUndo();
           beginBatch();
@@ -214,63 +205,40 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
         },
 
         // ─── Selektions-Werkzeug ──────────────────────────────────────
-        onSelectRect: (x0, y0, x1, y1, modifier) => {
-          const rectKeys = cellsInRect(x0, y0, x1, y1);
-          const g = gridRef.current;
-          const hit = new Set<string>();
-          for (const k of rectKeys) if (g.has(k)) hit.add(k);
-
-          const current = selectedRef.current;
-          if (modifier === 'add') {
-            setSelection(new Set([...current, ...hit]));
-          } else if (modifier === 'subtract') {
-            setSelection(new Set([...current].filter(k => !hit.has(k))));
-          } else {
-            setSelection(hit);
-          }
-          activeDragRectRef.current = null;
-          dirtyRef.current = true;
+        onSelectRect: (x0, y0, x1, y1) => {
+          finishMarquee({ x: x0, y: y0 }, { x: x1, y: y1 });
         },
 
         onSelectRectPreview: (x0, y0, x1, y1) => {
-          activeDragRectRef.current = { x0, y0, x1, y1 };
-          dirtyRef.current = true;
+          updateMarquee({ x: x0, y: y0 }, { x: x1, y: y1 });
         },
 
         onSelectClear: () => {
           clearSelection();
-          dirtyRef.current = true;
         },
 
-        // Live-Modell: schreibt SOFORT ins Grid (siehe gridStore.ts) — kein
-        // separater Vorschau-/Pending-Zustand mehr.
         onSelectDragStart: () => {
-          beginSelectionDrag(selectedRef.current);
+          beginFloatingDrag();
         },
 
         onSelectDragStep: (dx, dy) => {
-          dragSelectionTo(dx, dy);
-          dirtyRef.current = true;
+          updateFloatingDrag(dx, dy);
         },
 
         onSelectDragEnd: () => {
-          endSelectionDrag();
-          dirtyRef.current = true;
+          // Bewusst kein Commit hier — siehe onSelectDragEnd-Doku in
+          // canvas/input.ts. Nichts weiter zu tun.
         },
 
         onSelectCancel: () => {
-          // No-Op falls gar kein Verschiebe-Drag lief (z. B. reine
-          // Rechteckauswahl im Gange) — siehe cancelSelectionDrag-Doku.
-          cancelSelectionDrag();
-          activeDragRectRef.current = null;
-          dirtyRef.current = true;
+          interruptInteraction();
         },
       },
       () => cameraRef.current,
       () => toolRef.current,
-      // Hit-Test: `selected` ist immer die aktuelle, sichtbare Position —
-      // keine Offset-Rechnung mehr nötig (anders als im alten pendingOffset-Modell).
-      (cx, cy) => selectedRef.current.has(`${cx},${cy}`),
+      // Siehe getSelectionHit-Doku im PointerController-Konstruktor: hat
+      // Nebenwirkungen (Commit/Anheben), ist kein reiner Hit-Test mehr.
+      (cx, cy) => resolvePointerDown({ x: cx, y: cy }),
     );
 
     ctrlRef.current = ctrl;

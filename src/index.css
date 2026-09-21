@@ -175,6 +175,10 @@ body { overflow: hidden; }
 .sel-action-btn:hover { background: rgba(68,136,204,0.15); }
 .sel-action-danger { color: var(--cell-delete); }
 .sel-action-danger:hover { background: rgba(255,68,85,0.15); }
+/* Bestätigen-Button für eine schwebende Selektion — gleiche Farbe wie der
+   Play-Button in SimBar.tsx (Grün = "diese Aktion abschließen/bestätigen"). */
+.sel-action-confirm { color: var(--sim-green); }
+.sel-action-confirm:hover { background: rgba(0,170,85,0.15); }
 
 /* Trenner zwischen den Aktionsgruppen (Zwischenablage / Transformieren /
    Exportieren / Löschen) — gleiche Optik wie die Trenner in SimBar.tsx. */

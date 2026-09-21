@@ -18,6 +18,7 @@ const TOOLS: { id: Tool; icon: string; label: string; shortcut: string; color: s
 export function Toolbar() {
   const tool    = useUIStore(s => s.tool);
   const setTool = useUIStore(s => s.setTool);
+  const commitFloating = useSelectionStore(s => s.commitFloating);
   const clearSelection = useSelectionStore(s => s.clearSelection);
 
   return (
@@ -42,12 +43,18 @@ export function Toolbar() {
             // Erneuter Klick auf das bereits aktive Werkzeug → deselektieren
             // (kein Werkzeug aktiv, alles pannt — siehe canvas/input.ts shouldPan).
             const nextTool = tool === t.id ? null : t.id;
-            // Eine Selektion darf ein anderes Werkzeug nicht überleben — sonst
-            // könnte man mit dem neuen Werkzeug versehentlich Zellen genau
-            // dort platzieren, wo die vergessene Selektion noch lag (setCell
-            // überschreibt ohne Rückfrage). Gilt für JEDEN Wechsel WEG von
-            // "select", auch das reine Deselektieren (nextTool=null).
-            if (tool === 'select' && nextTool !== 'select') clearSelection();
+            // Gilt für JEDEN Wechsel WEG von "select" — auch das reine
+            // Deselektieren (nextTool=null). Eine schwebende Selektion wird
+            // dabei committed (State-Machine-Regel: Werkzeugwechsel bestätigt
+            // automatisch, siehe selectionStore.ts), eine nur "selected"
+            // (nicht schwebende) Selektion wird abgewählt — sie darf einen
+            // Werkzeugwechsel nicht überleben, sonst könnte ein ANDERES
+            // Werkzeug versehentlich Zellen genau dort platzieren, wo die
+            // vergessene Selektion noch lag.
+            if (tool === 'select' && nextTool !== 'select') {
+              if (useSelectionStore.getState().selection.status === 'floating') commitFloating();
+              else clearSelection();
+            }
             setTool(nextTool);
           }}
           style={{
