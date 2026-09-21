@@ -131,6 +131,70 @@ body { overflow: hidden; }
   z-index: 10;
 }
 
+/* ── Selektions-Mini-Toolbar (Schritt 5 / 5b Überarbeitung) ────── */
+/* Schwebt zentriert über dem Canvas, analog zu .step-overlay, aber
+   unten und interaktiv (pointer-events, kein pointer-events:none).
+   Zeigt jetzt Icon + Text-Label (vorher Icon-only) — title-Tooltips lösen
+   auf Touch-Geräten nicht aus, daher war die reine Icon-Reihe dort nicht
+   selbsterklärend. flex-wrap (bereits vorher gesetzt) lässt Gruppen auf
+   schmalen Bildschirmen einfach umbrechen statt überzulaufen. */
+.selection-actions {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  max-width: calc(100% - 24px);
+  gap: 4px;
+  padding: 4px;
+  background: rgba(15, 15, 42, 0.9);
+  border: 1px solid var(--border-ui);
+  border-radius: 6px;
+  z-index: 10;
+}
+.sel-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: var(--touch-target);
+  min-width: var(--touch-target);
+  padding: 0 10px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--sim-blue);
+  font-size: 15px;
+  font-family: var(--font);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.sel-action-btn:hover { background: rgba(68,136,204,0.15); }
+.sel-action-danger { color: var(--cell-delete); }
+.sel-action-danger:hover { background: rgba(255,68,85,0.15); }
+
+/* Trenner zwischen den Aktionsgruppen (Zwischenablage / Transformieren /
+   Exportieren / Löschen) — gleiche Optik wie die Trenner in SimBar.tsx. */
+.sel-action-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 6px 2px;
+  background: var(--border-ui);
+  flex-shrink: 0;
+}
+
+/* Sehr schmale Phones: Labels ausblenden (nur Icon + title-Tooltip auf
+   Desktop bzw. reines Icon auf Touch), damit die Leiste nicht zu viele
+   Zeilen hoch wird. iPad/Tablet/Desktop haben genug Breite und behalten
+   die Labels — anders als bei Toolbar/SimBar (1260px-Grenze) hat diese
+   Leiste den ganzen Canvas als Platz, nicht die schmale Top-Bar. */
+@media (max-width: 380px) {
+  .sel-action-btn .btn-label { display: none; }
+}
+
 /* ── Toolbar-Buttons ────────────────────────────────────────── */
 .tool-btn {
   display: inline-flex;

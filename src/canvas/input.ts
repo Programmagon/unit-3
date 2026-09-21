@@ -8,14 +8,19 @@ import {
   type Camera,
 } from "./coordinates";
 
-export type Tool = CellType | "delete";
+export type Tool = CellType | "delete" | "select";
 
 // ─── applyTool ────────────────────────────────────────────────────────
+// Hinweis: aktuell ungenutzt (Canvas.tsx implementiert die Platzier-Logik
+// inline in seinem onPlace-Callback). Parameter-Typ bewusst auf CellType |
+// 'delete' verengt — diese Funktion kannte 'select' nie und war dafür auch
+// nie gedacht (Selektion läuft komplett über den isolierten select-Zweig
+// im PointerController, nicht über applyTool).
 export function applyTool(
   grid: Grid,
   cx: number,
   cy: number,
-  tool: Tool,
+  tool: CellType | "delete",
   isDrag = false
 ): boolean {
   const k = key(cx, cy);
@@ -119,6 +124,41 @@ export interface PointerCallbacks {
   onDragStart?: () => void;
   /** Wird bei pointerUp/pointerCancel aufgerufen, wenn zuvor gedraggt wurde */
   onDragEnd?: () => void;
+
+  // ─── Selektions-Werkzeug (Schritt 5) ──────────────────────────────
+  /**
+   * Rechteckauswahl fertig gezogen (Weltkoordinaten, committed).
+   * modifier: 'replace' (normal), 'add' (Shift-gezogen), 'subtract' (Alt-gezogen).
+   */
+  onSelectRect?: (x0: number, y0: number, x1: number, y1: number, modifier: 'replace' | 'add' | 'subtract') => void;
+  /**
+   * Live-Vorschau während des Aufziehens eines neuen Rechtecks (Weltkoordinaten).
+   * Nicht im ursprünglichen Callback-Satz der Spec, aber notwendig: renderer.ts'
+   * renderSelectionOverlay() braucht laufend aktuelle activeDragRect-Daten für
+   * den gestrichelten Rahmen WÄHREND des Ziehens, nicht erst danach.
+   */
+  onSelectRectPreview?: (x0: number, y0: number, x1: number, y1: number) => void;
+  /** Tap außerhalb der aktuellen Selektion (kein Drag) → Selektion aufheben. */
+  onSelectClear?: () => void;
+  /** Verschiebung einer bestehenden Selektion — Vorschau, noch nicht committed. */
+  onSelectMovePreview?: (dx: number, dy: number) => void;
+  /** Verschiebung committed (pointerUp nach Selektions-Drag). */
+  onSelectMoveCommit?: (dx: number, dy: number) => void;
+  /**
+   * Wird aufgerufen BEVOR eine genuine neue Rechteckauswahl beginnt (d. h.
+   * der Tap trifft NICHT die aktuelle — ggf. schwebende — Selektion, oder
+   * eine Modifier-Taste war gehalten). Eine evtl. noch nicht ins Grid
+   * geschriebene Verschiebung muss vorher finalisiert werden (siehe
+   * store/selectionOps.ts finalizePendingMove).
+   */
+  onSelectFinalize?: () => void;
+  /**
+   * Rechteck- oder Verschiebe-Vorschau abgebrochen ohne Commit (z. B. wenn ein
+   * zweiter Finger während eines Selektions-Drags aufsetzt → Pinch übernimmt).
+   * Nicht im ursprünglichen Callback-Satz, aber nötig damit keine "Geister"-
+   * Vorschau (previewOffset/activeDragRect) hängen bleibt.
+   */
+  onSelectCancel?: () => void;
 }
 
 // ─── PointerController ────────────────────────────────────────────────
@@ -127,7 +167,8 @@ export class PointerController {
   private readonly cb: PointerCallbacks;
   private readonly canvas: HTMLCanvasElement;
   private readonly getCamera: () => Camera;
-  private readonly getTool: () => Tool;
+  private readonly getTool: () => Tool | null;
+  private readonly getSelectionHit: (cx: number, cy: number) => boolean;
 
   // Einzel-Pointer-Zustand
   private isPanning = false;
@@ -138,6 +179,16 @@ export class PointerController {
   /** Letzte platzierte Zelle — Startpunkt für Bresenham-Interpolation */
   private lastCellPos: [number, number] | null = null;
   private longPressTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // ─── Selektions-Zustand ───────────────────────────────────────────
+  // Eigene Felder, KEINE Wiederverwendung von isDragging/anchorCell/
+  // lastCellPos (die gehören zum Platzier-/Lösch-Pfad) — der select-Zweig
+  // ist strikt isoliert, kein gemeinsamer Codepfad mit dem Platzieren.
+  private selectMode: "rect" | "move" | null = null;
+  private selectAnchor: [number, number] | null = null;
+  private selectDidDrag = false;
+  /** Gesetzt in pointerDown (Schritt 5b, Punkt 5 — Multi-Select), an onSelectRect durchgereicht. */
+  private selectModifier: "replace" | "add" | "subtract" = "replace";
 
   // Pinch-Zustand
   private pinchDist = 0;
@@ -156,12 +207,14 @@ export class PointerController {
     canvas: HTMLCanvasElement,
     callbacks: PointerCallbacks,
     getCamera: () => Camera,
-    getTool: () => Tool
+    getTool: () => Tool | null,
+    getSelectionHit: (cx: number, cy: number) => boolean
   ) {
     this.canvas = canvas;
     this.cb = callbacks;
     this.getCamera = getCamera;
     this.getTool = getTool;
+    this.getSelectionHit = getSelectionHit;
   }
 
   // ─── Hilfsfunktionen ────────────────────────────────────────────────
@@ -178,6 +231,21 @@ export class PointerController {
   }
 
   private shouldPan(e: PointerEvent): boolean {
+    // Kein Werkzeug aktiv → JEDE Eingabe pannt (alle Maustasten, ein Finger
+    // auf Touch) — dieser Check läuft in pointerDown VOR Selektion,
+    // Rechtsklick-Löschen und Long-Press-Löschen, daher genügt der einfache
+    // Vorrang hier, ohne diese anderen Zweige einzeln absichern zu müssen.
+    if (this.getTool() === null) return true;
+    // BUGFIX: Beim Auswählen-Werkzeug ist Alt bereits als Abziehen-Modifier
+    // belegt (siehe pointerDown select-Zweig: modifierHeld/selectModifier).
+    // Ohne diese Ausnahme fing dieser Check JEDES Alt+Maus-Drag vorher als
+    // Schwenken ab, bevor der Selektions-Zweig überhaupt erreicht wurde —
+    // der Abziehen-Modifier war über Maus dadurch praktisch unerreichbar
+    // (Touch/Stift kennen kein Alt und waren nicht betroffen). Mittlere
+    // Maustaste bleibt als Pan-Auslöser bestehen, die kollidiert mit nichts.
+    if (this.getTool() === "select") {
+      return e.pointerType === "mouse" && e.button === 1;
+    }
     return e.pointerType === "mouse" && (e.button === 1 || e.altKey);
   }
 
@@ -321,6 +389,12 @@ export class PointerController {
 
     if (this.pointers.size === 2) {
       this.resetSinglePointerState();
+      if (this.selectMode !== null) {
+        this.cb.onSelectCancel?.();
+        this.selectMode = null;
+        this.selectAnchor = null;
+        this.selectDidDrag = false;
+      }
       this.wasPinching = true;
       this.startPinch();
       return;
@@ -328,9 +402,34 @@ export class PointerController {
     if (this.pointers.size > 2) return;
 
     this.resetSinglePointerState();
+    // Defensiver Reset — sollte durch pointerUp/pointerCancel bereits null sein.
+    this.selectMode = null;
+    this.selectAnchor = null;
+    this.selectDidDrag = false;
 
     if (this.shouldPan(e)) {
       this.isPanning = true;
+      return;
+    }
+
+    // ─── Selektions-Werkzeug: früh abzweigen, strikt isoliert ─────────
+    // Kein gemeinsamer Codepfad mit Platzieren/Löschen — Rechtsklick- und
+    // Long-Press-Löschen unten werden für tool='select' nie erreicht.
+    if (this.getTool() === "select") {
+      const [cx, cy] = this.cellAt(e.clientX, e.clientY);
+      // Shift/Alt gehalten → IMMER neue Rechteckauswahl, Hit-Test der
+      // bestehenden Selektion wird ignoriert (wer eine Modifier-Taste hält,
+      // will die Auswahl anpassen, nicht etwas verschieben).
+      const modifierHeld = e.shiftKey || e.altKey;
+      const isHit = !modifierHeld && this.getSelectionHit(cx, cy);
+      if (!isHit) {
+        // Genuine neue Rechteckauswahl beginnt → evtl. schwebende
+        // Verschiebung MUSS vorher finalisiert werden.
+        this.cb.onSelectFinalize?.();
+      }
+      this.selectAnchor = [cx, cy];
+      this.selectMode = isHit ? "move" : "rect";
+      this.selectModifier = e.shiftKey ? "add" : e.altKey ? "subtract" : "replace";
       return;
     }
 
@@ -376,6 +475,27 @@ export class PointerController {
       return;
     }
 
+    // ─── Selektions-Werkzeug: strikt isoliert ─────────────────────────
+    if (this.selectMode !== null) {
+      const dist = Math.hypot(
+        e.clientX - p.startClientX,
+        e.clientY - p.startClientY
+      );
+      if (!this.selectDidDrag && dist >= this.tapThreshold(p.type)) {
+        this.selectDidDrag = true;
+      }
+      if (!this.selectDidDrag) return; // noch unentschieden: Tap oder Drag?
+
+      const [cx, cy] = this.cellAt(e.clientX, e.clientY);
+      const anchor = this.selectAnchor!;
+      if (this.selectMode === "rect") {
+        this.cb.onSelectRectPreview?.(anchor[0], anchor[1], cx, cy);
+      } else {
+        this.cb.onSelectMovePreview?.(cx - anchor[0], cy - anchor[1]);
+      }
+      return;
+    }
+
     // Pan
     if (this.isPanning) {
       const [prevSx, prevSy] = clientToCanvas(prevX, prevY, this.canvas);
@@ -418,6 +538,32 @@ export class PointerController {
     this.pointers.delete(e.pointerId);
     this.reanchorRemainingPointer();
 
+    // ─── Selektions-Werkzeug: strikt isoliert ─────────────────────────
+    if (this.selectMode !== null) {
+      if (this.pointers.size === 0) {
+        const anchor = this.selectAnchor!;
+        if (this.selectDidDrag) {
+          const [cx, cy] = this.cellAt(e.clientX, e.clientY);
+          if (this.selectMode === "rect") {
+            this.cb.onSelectRect?.(anchor[0], anchor[1], cx, cy, this.selectModifier);
+          } else {
+            const dx = cx - anchor[0], dy = cy - anchor[1];
+            // Nulldelta nicht committen — kein leerer Undo-Schritt für
+            // eine Selektion, die nur angetippt, aber nie bewegt wurde.
+            if (dx !== 0 || dy !== 0) this.cb.onSelectMoveCommit?.(dx, dy);
+          }
+        } else if (this.selectMode === "rect") {
+          // Reiner Tap außerhalb der Selektion (kein Hit, keine Bewegung) → aufheben.
+          this.cb.onSelectClear?.();
+        }
+        // Reiner Tap im 'move'-Modus ohne Bewegung → No-Op, Selektion bleibt.
+        this.selectMode = null;
+        this.selectAnchor = null;
+        this.selectDidDrag = false;
+      }
+      return;
+    }
+
     if (this.pointers.size <= 1) {
       const wasTap =
         !this.isPanning &&
@@ -442,6 +588,17 @@ export class PointerController {
     this.pointers.delete(e.pointerId);
     this.cancelLongPress();
     this.reanchorRemainingPointer();
+
+    if (this.selectMode !== null) {
+      if (this.pointers.size === 0) {
+        this.cb.onSelectCancel?.();
+        this.selectMode = null;
+        this.selectAnchor = null;
+        this.selectDidDrag = false;
+      }
+      return;
+    }
+
     if (this.pointers.size === 0) {
       if (this.isDragging) this.cb.onDragEnd?.();
       this.wasPinching = false;

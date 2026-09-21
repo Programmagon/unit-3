@@ -5,8 +5,9 @@ import type { Tool } from '../canvas/input';
 // uiStore verwaltet nur noch das aktive Werkzeug.
 
 interface UIStore {
-  tool:    Tool;
-  setTool: (t: Tool) => void;
+  /** null = kein Werkzeug aktiv — dann pannt jede Eingabe (siehe canvas/input.ts shouldPan). */
+  tool:    Tool | null;
+  setTool: (t: Tool | null) => void;
 }
 
 export const useUIStore = create<UIStore>(set => ({
