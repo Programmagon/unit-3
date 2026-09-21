@@ -10,7 +10,6 @@ import { useSelectionStore } from './store/selectionStore';
 import { useKeyboardShortcuts } from './store/useKeyboardShortcuts';
 import { serialize, deserialize, SerializeError, deserializeSelection } from './lib/serializer';
 import { saveToFile, loadFromFile } from './lib/fileIO';
-import { finalizePendingMove } from './store/selectionOps';
 
 /** `unit3-projekt-YYYY-MM-DD.u3` — Datum wird beim Speichern generiert. */
 function suggestedFilename() {
@@ -50,15 +49,16 @@ export default function App() {
   const handleSave = async () => {
     const camera = canvasRef.current?.getCameraSnapshot();
     if (!camera) return; // Canvas noch nicht bereit
-    // BUGFIX (Regelset siehe selectionOps.ts): Speichern muss den ECHTEN
-    // Grid-Zustand exportieren. Ohne Finalisieren würde bei schwebender
-    // Verschiebung eine .u3-Datei entstehen, die die alte (unverschobene)
-    // Position enthält, obwohl der Canvas die neue zeigt. Die `grid`-
-    // Variable oben ist an den LETZTEN Render gebunden — finalizePendingMove()
-    // mutiert den Store synchron, aber dieser Render-Snapshot zieht erst beim
-    // NÄCHSTEN Render nach. Deshalb hier bewusst frisch aus dem Store lesen
-    // (gleiches Muster wie SelectionActions.tsx handleExport).
-    finalizePendingMove();
+    // Speichern muss den ECHTEN Grid-Zustand exportieren: eine schwebende
+    // Selektion hat ihre Quelle geleert und den Inhalt nur im Speicher
+    // (siehe canvas/selection.ts) — ohne Commit würde eine .u3-Datei
+    // entstehen, die die Lücke zeigt, aber nicht den schwebenden Inhalt.
+    // useGridStore.getState() bewusst statt der oben gebundenen Closure-
+    // Variable: commitFloating() mutiert den Store synchron, der Render-
+    // Snapshot von oben zieht aber erst beim nächsten Render nach.
+    if (useSelectionStore.getState().selection.status === 'floating') {
+      useSelectionStore.getState().commitFloating();
+    }
     const freshGrid = useGridStore.getState().grid;
     const json = serialize(freshGrid, camera);
     try {
@@ -81,7 +81,6 @@ export default function App() {
     setRunning(false);
     try {
       const { grid: loaded, camera } = deserialize(text);
-      useSelectionStore.getState().clearSelection();
       loadGrid(loaded);
       canvasRef.current?.setCameraSnapshot(camera);
     } catch (e) {
@@ -112,7 +111,7 @@ export default function App() {
         alert('Die Datei enthält keine gültigen Zellen — falsches Dateiformat gewählt?');
         return;
       }
-      useSelectionStore.getState().setClipboard(cells);
+      useSelectionStore.getState().setClipboardFromBuffer(cells);
     } catch (e) {
       const msg = e instanceof SerializeError ? e.message : 'Datei konnte nicht gelesen werden';
       alert(msg);

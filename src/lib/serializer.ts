@@ -3,9 +3,9 @@
  * KEIN React-Import, KEIN Store-Import — nur Simulations-Typen.
  */
 import type { Grid, CellType } from '../simulation/types';
-// Typ-only Import — wird zur Compile-Zeit entfernt, kein Laufzeit-Store-Import
-// (der Konstraint "kein Store-Import" bleibt damit inhaltlich gewahrt).
-import type { ClipboardCell } from '../store/selectionStore';
+// Reiner Typ-Import aus der Selektions-GEOMETRIE (kein Store) — erfüllt den
+// "kein Store-Import"-Constraint dieser Datei sogar direkter als zuvor.
+import type { BufferCell } from '../canvas/selection';
 
 const CURRENT_VERSION = 1;
 const VALID_TYPES: readonly CellType[] = ['cable', 'inverter', 'delay'];
@@ -104,22 +104,22 @@ export function deserialize(json: string): { grid: Grid; camera: Camera } {
  */
 export interface SelectionFile {
   version: number;
-  cells: ClipboardCell[];
+  cells: BufferCell[];
 }
 
 /** Zwischenablage-Zellen → JSON-String im .u3sel-Dateiformat. */
-export function serializeSelection(cells: ClipboardCell[]): string {
+export function serializeSelection(cells: BufferCell[]): string {
   const file: SelectionFile = { version: CURRENT_VERSION, cells };
   return JSON.stringify(file);
 }
 
 /**
- * JSON-String → ClipboardCell[]. Wirft SerializeError bei ungültigem JSON,
+ * JSON-String → BufferCell[]. Wirft SerializeError bei ungültigem JSON,
  * falscher Struktur oder unbekannter Version — gleiche Konventionen wie
  * deserialize() oben. Einzelne Zellen mit unbekanntem Typ oder falscher
  * Form werden übersprungen statt die ganze Datei abzulehnen.
  */
-export function deserializeSelection(json: string): ClipboardCell[] {
+export function deserializeSelection(json: string): BufferCell[] {
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
@@ -139,10 +139,10 @@ export function deserializeSelection(json: string): ClipboardCell[] {
     throw new SerializeError('Datei konnte nicht gelesen werden');
   }
 
-  const cells: ClipboardCell[] = [];
+  const cells: BufferCell[] = [];
   for (const entry of file.cells) {
     if (typeof entry !== 'object' || entry === null) continue;
-    const c = entry as Partial<ClipboardCell>;
+    const c = entry as Partial<BufferCell>;
     if (typeof c.dx !== 'number' || typeof c.dy !== 'number') continue;
     if (typeof c.type !== 'string' || !VALID_TYPES.includes(c.type as CellType)) continue;
     if (typeof c.state !== 'boolean') continue;

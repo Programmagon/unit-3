@@ -1,5 +1,5 @@
 import { useGridStore } from '../store/gridStore';
-import { finalizePendingMove } from '../store/selectionOps';
+import { useSelectionStore } from '../store/selectionStore';
 
 interface SimBarProps {
   /** Speichert Grid + Kamera als .u3-Datei. Wird von App.tsx implementiert. */
@@ -85,7 +85,16 @@ export function SimBar({ onSave, onLoad, onImportSelection }: SimBarProps) {
       {/* Schritt */}
       <button
         className="sim-btn"
-        onClick={() => { if (!running) { finalizePendingMove(); step(); } }}
+        onClick={() => {
+          if (running) return;
+          // Simulation muss den ECHTEN Grid-Zustand sehen — eine schwebende
+          // Selektion hat ihre Quelle geleert und den Inhalt nur im Speicher
+          // (siehe canvas/selection.ts). Erst committen, dann simulieren.
+          if (useSelectionStore.getState().selection.status === 'floating') {
+            useSelectionStore.getState().commitFloating();
+          }
+          step();
+        }}
         disabled={running}
         style={{
           background:  'transparent',
@@ -101,7 +110,12 @@ export function SimBar({ onSave, onLoad, onImportSelection }: SimBarProps) {
       {/* Play / Pause */}
       <button
         className="sim-btn"
-        onClick={() => { if (!running) finalizePendingMove(); setRunning(!running); }}
+        onClick={() => {
+          if (!running && useSelectionStore.getState().selection.status === 'floating') {
+            useSelectionStore.getState().commitFloating();
+          }
+          setRunning(!running);
+        }}
         style={{
           background:  running ? 'var(--sim-red)' : 'var(--sim-green)',
           color:       '#000',

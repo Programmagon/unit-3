@@ -2,16 +2,25 @@ import { useEffect } from 'react';
 import { useUIStore }        from './uiStore';
 import { useGridStore }      from './gridStore';
 import { useSelectionStore } from './selectionStore';
-import { boundingBox }       from '../canvas/selection';
-import { finalizePendingMove, centeredPasteAnchor } from './selectionOps';
+
+/** Pfeiltaste → Delta einer Zelle, für die Selektions-Nudge weiter unten. */
+const ARROW_DELTA: Record<string, [number, number]> = {
+  ArrowUp:    [0, -1],
+  ArrowDown:  [0,  1],
+  ArrowLeft:  [-1, 0],
+  ArrowRight: [1,  0],
+};
 
 /**
  * Zentraler Keyboard-Shortcut-Hook.
  *
- * Vorher waren Space/[.] in Toolbar.tsx registriert, obwohl sie zu
- * SimBar gehören — eine versteckte Abhängigkeit. Jetzt lebt die
- * gesamte Tastatur-Logik an einer Stelle (App.tsx), unabhängig davon
- * welche Komponente die zugehörigen Buttons rendert.
+ * Selektions-Shortcuts folgen jetzt dem State-Machine-Modell (siehe
+ * canvas/selection.ts / selectionStore.ts): Rotieren/Spiegeln/Verschieben
+ * schreiben NIE direkt ins Grid, sondern nur an eine schwebende Selektion
+ * im Speicher — daher gibt es kein "erst finalisieren" mehr wie im alten
+ * pendingOffset-Modell. Neu: Enter bestätigt eine schwebende Selektion
+ * explizit (zusätzlich zu den automatischen Commit-Auslösern wie
+ * Werkzeugwechsel oder Klick außerhalb).
  *
  * @param getPasteAnchor Liefert die zuletzt bekannte Zeiger-Zellposition für
  *   Strg+V (siehe Canvas.tsx CanvasHandle.getLastPointerCell). Optional, da
@@ -26,80 +35,87 @@ export function useKeyboardShortcuts(getPasteAnchor?: () => [number, number] | n
   const setRunning = useGridStore(s => s.setRunning);
   const undo       = useGridStore(s => s.undo);
   const redo       = useGridStore(s => s.redo);
-  const deleteCells = useGridStore(s => s.deleteCells);
-  const pasteCells  = useGridStore(s => s.pasteCells);
-  const rotateCells = useGridStore(s => s.rotateCells);
-  const mirrorCells = useGridStore(s => s.mirrorCells);
 
-  const selected       = useSelectionStore(s => s.selected);
-  const clipboard      = useSelectionStore(s => s.clipboard);
-  const setSelection   = useSelectionStore(s => s.setSelection);
-  const clearSelection = useSelectionStore(s => s.clearSelection);
-  const copyToClipboard = useSelectionStore(s => s.copyToClipboard);
+  const selection  = useSelectionStore(s => s.selection);
+  const clipboard  = useSelectionStore(s => s.clipboard);
+  const copySelection    = useSelectionStore(s => s.copySelection);
+  const cutSelection     = useSelectionStore(s => s.cutSelection);
+  const pasteClipboard   = useSelectionStore(s => s.pasteClipboard);
+  const duplicateSelection = useSelectionStore(s => s.duplicateSelection);
+  const deleteSelectionContents = useSelectionStore(s => s.deleteSelectionContents);
+  const rotateSelection  = useSelectionStore(s => s.rotateSelection);
+  const flipSelection    = useSelectionStore(s => s.flipSelection);
+  const nudgeSelection   = useSelectionStore(s => s.nudgeSelection);
+  const commitFloating   = useSelectionStore(s => s.commitFloating);
+  const clearSelection   = useSelectionStore(s => s.clearSelection);
+  const escapeSelection  = useSelectionStore(s => s.escape);
+
+  const hasSelection = selection.status === 'selected' || selection.status === 'floating';
 
   useEffect(() => {
+    /** Werkzeugwechsel: schwebende Selektion committen, sonst nur abwählen
+     *  — eine Selektion darf einen Werkzeugwechsel nicht überleben (mit
+     *  einem ANDEREN Werkzeug könnte man sonst versehentlich Zellen genau
+     *  dort platzieren, wo die vergessene Selektion noch lag). */
+    const releaseSelectionForToolSwitch = () => {
+      if (useSelectionStore.getState().selection.status === 'floating') commitFloating();
+      else clearSelection();
+    };
+
     const onKey = (e: KeyboardEvent) => {
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
 
-      // BUGFIX: die 1-Buchstaben-Shortcuts unten prüften bisher NIE, ob
-      // Strg/Cmd/Alt gehalten wird. Dadurch wurde z. B. Strg+S (Seite
-      // speichern) durch setTool('select') "mitgetriggert", und — schwer-
-      // wiegender — Strg+R und Strg+Umschalt+R (Browser-Neuladen / Hard
-      // Reload) wurden per e.preventDefault() im Rotieren-Zweig unten
-      // GESCHLUCKT, sobald eine Selektion aktiv war. noModifier schützt
-      // alle reinen Einzeltasten-Shortcuts davor, mit Browser-Shortcuts zu
-      // kollidieren; die explizit modifier-basierten Shortcuts (Strg+C/X/V/
-      // D/Z/Y weiter unten) sind davon unberührt.
+      // Reine Einzeltasten-Shortcuts (1/2/3/E/S/R/F/Pfeile) müssen Strg/Cmd/
+      // Alt ignorieren, sonst kollidieren sie mit Browser-Shortcuts wie
+      // Strg+S (Speichern) oder Strg+R (Neuladen). Die explizit modifier-
+      // basierten Shortcuts (Strg+C/X/V/D/Z/Y weiter unten) sind davon
+      // unberührt.
       const noModifier = !e.ctrlKey && !e.metaKey && !e.altKey;
 
       // Werkzeuge
-      // BUGFIX: Werkzeugwechsel hob bisher nur die schwebende Verschiebung
-      // auf (finalizePendingMove), die Selektion selbst blieb aktiv — siehe
-      // ausführliche Begründung in Toolbar.tsx (gleicher Fix). clearSelection
-      // ruft finalizePendingMove NICHT ersetzend auf, sondern ergänzend:
-      // erst committen (siehe Regelset), dann deselektieren.
-      if (noModifier && e.key === '1') {
-        if (tool === 'select') { finalizePendingMove(); clearSelection(); }
-        setTool('cable');
-      }
-      if (noModifier && e.key === '2') {
-        if (tool === 'select') { finalizePendingMove(); clearSelection(); }
-        setTool('inverter');
-      }
-      if (noModifier && e.key === '3') {
-        if (tool === 'select') { finalizePendingMove(); clearSelection(); }
-        setTool('delay');
-      }
-      if (noModifier && (e.key === 'e' || e.key === 'E')) {
-        if (tool === 'select') { finalizePendingMove(); clearSelection(); }
-        setTool('delete');
-      }
+      if (noModifier && e.key === '1') { if (tool === 'select') releaseSelectionForToolSwitch(); setTool('cable'); }
+      if (noModifier && e.key === '2') { if (tool === 'select') releaseSelectionForToolSwitch(); setTool('inverter'); }
+      if (noModifier && e.key === '3') { if (tool === 'select') releaseSelectionForToolSwitch(); setTool('delay'); }
+      if (noModifier && (e.key === 'e' || e.key === 'E')) { if (tool === 'select') releaseSelectionForToolSwitch(); setTool('delete'); }
       if (noModifier && (e.key === 's' || e.key === 'S')) {
-        // BUGFIX: entspricht jetzt dem Toggle-Verhalten des Werkzeug-Buttons
-        // in Toolbar.tsx (erneutes Aktivieren eines bereits aktiven
-        // Werkzeugs schaltet es aus) — vorher setzte die Taste "S" das
-        // Werkzeug bei wiederholtem Drücken immer wieder auf 'select',
-        // während der gleichnamige Button es beim zweiten Klick deaktivierte.
-        if (tool === 'select') { finalizePendingMove(); clearSelection(); setTool(null); }
+        // Entspricht dem Toggle-Verhalten des Werkzeug-Buttons in
+        // Toolbar.tsx: erneutes Aktivieren eines bereits aktiven
+        // Werkzeugs schaltet es aus.
+        if (tool === 'select') { releaseSelectionForToolSwitch(); setTool(null); }
         else setTool('select');
       }
 
+      // ── Selektion: Pfeiltasten-Nudge (nach Tiled-Vorbild) ────────────
+      // Nur wenn das Auswählen-Werkzeug aktiv ist und etwas selektiert ist
+      // — sonst bleibt ArrowRight der Simulations-Schritt-Shortcut weiter
+      // unten (die beiden Bedeutungen würden sonst kollidieren). Kein
+      // Debounce/Batching mehr nötig: nudgeSelection schreibt nie ins Grid,
+      // beliebig viele Nudges werden erst bei EINEM commitFloating() zu
+      // einem einzigen Undo-Schritt.
+      if (noModifier && tool === 'select' && hasSelection && e.key in ARROW_DELTA) {
+        e.preventDefault();
+        const [dx, dy] = ARROW_DELTA[e.key];
+        nudgeSelection(dx, dy);
+        return;
+      }
+
       // Simulation
-      // BUGFIX (Kehrseite des Commit-Themas — siehe Regelset in
-      // selectionOps.ts): Simulation liest/mutiert den ECHTEN Grid-Zustand.
-      // Ohne Finalisieren würde bei schwebender Verschiebung ein älterer
-      // Stand simuliert als der gerade sichtbare. Nur beim STARTEN nötig,
-      // nicht beim Pausieren — Pause verändert den Grid-Zustand nicht.
       // e.repeat-Guard: ohne dies togglet Halten der Leertaste (OS-Tastenwiederholung)
       // rasant zwischen Play/Pause hin und her.
+      // Schwebende Selektion vor Simulationsstart committen (analog zu
+      // SimBar.tsx) — Simulation muss den echten Grid-Zustand sehen, nicht
+      // eine noch nicht geschriebene, nur im Speicher schwebende Änderung.
       if (e.key === ' ' && !e.repeat) {
         e.preventDefault();
-        if (!running) finalizePendingMove();
+        if (!running && selection.status === 'floating') commitFloating();
         setRunning(!running);
       }
       if (e.key === '.' || e.key === 'ArrowRight') {
         e.preventDefault();
-        if (!running) { finalizePendingMove(); step(); }
+        if (!running) {
+          if (selection.status === 'floating') commitFloating();
+          step();
+        }
       }
 
       // Undo/Redo
@@ -118,91 +134,58 @@ export function useKeyboardShortcuts(getPasteAnchor?: () => [number, number] | n
         redo();
       }
 
-      // ── Selektion (Schritt 5 / 5b) ──────────────────────────────────
+      // ── Selektion ─────────────────────────────────────────────────
       if (e.key === 'Escape') {
-        // BUGFIX: Escape rief vorher finalizePendingMove() auf — committete
-        // die schwebende Verschiebung also, statt sie zu verwerfen. Exakt
-        // dieses Verhalten hatte Aseprite ursprünglich auch und hat es 2025
-        // bewusst als Bug gefixt (aseprite/aseprite#5102): Escape muss die
-        // Original-Position wiederherstellen, keinen Undo-Schritt erzeugen
-        // (siehe Regelset in selectionOps.ts). clearSelection() setzt
-        // pendingOffset bereits mit zurück — kein finalizePendingMove() hier.
-        clearSelection();
+        // Bei schwebender Selektion: exakt den Zustand von vor dem
+        // Anheben wiederherstellen (kein Undo-Schritt) — sonst abwählen.
+        escapeSelection();
         // Escape hebt jetzt auch das aktive Werkzeug auf (egal welches) —
         // kein Werkzeug aktiv, alles pannt (siehe canvas/input.ts shouldPan).
         setTool(null);
         return;
       }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selected.size > 0) {
+      if (e.key === 'Enter' && selection.status === 'floating') {
         e.preventDefault();
-        finalizePendingMove();
-        deleteCells(useSelectionStore.getState().selected);
-        clearSelection();
+        commitFloating();
         return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && selected.size > 0) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && hasSelection) {
         e.preventDefault();
-        finalizePendingMove();
-        copyToClipboard(useGridStore.getState().grid);
+        deleteSelectionContents();
         return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x' && selected.size > 0) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && hasSelection) {
         e.preventDefault();
-        // Ausschneiden = Kopieren + Löschen. deleteCells pusht genau EINEN
-        // Undo-Schritt — copyToClipboard selbst mutiert das Grid nicht.
-        finalizePendingMove();
-        const freshSelected = useSelectionStore.getState().selected;
-        copyToClipboard(useGridStore.getState().grid);
-        deleteCells(freshSelected);
-        clearSelection();
+        copySelection();
         return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && !e.repeat && clipboard && clipboard.length > 0) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x' && hasSelection) {
         e.preventDefault();
-        // Bugfix: eine evtl. schwebende Verschiebung muss vor dem Einfügen
-        // finalisiert werden — sonst "erbt" die neu eingefügte Selektion
-        // später fälschlich den alten pendingOffset.
-        finalizePendingMove();
+        cutSelection();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && !e.repeat && clipboard && clipboard.buffer.length > 0) {
+        e.preventDefault();
         const anchor = getPasteAnchor?.() ?? [0, 0];
-        // Zentriert einfügen statt linksbündig — siehe centeredPasteAnchor-Doku
-        // in selectionOps.ts.
-        const [atX, atY] = centeredPasteAnchor(clipboard, anchor[0], anchor[1]);
-        const newKeys = pasteCells(clipboard, atX, atY);
-        // null = Zielposition belegt — nichts eingefügt, alte Selektion
-        // bleibt bestehen (siehe pasteCells-Doku in gridStore.ts).
-        if (newKeys) setSelection(newKeys);
+        pasteClipboard({ x: anchor[0], y: anchor[1] });
         return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && !e.repeat && selected.size > 0) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && !e.repeat && hasSelection) {
         e.preventDefault();
-        finalizePendingMove();
-        const freshSelected = useSelectionStore.getState().selected;
-        copyToClipboard(useGridStore.getState().grid);
-        // Versatz um die volle Breite statt fixem (1,1) — siehe Begründung
-        // in SelectionActions.tsx handleDuplicate.
-        const { minX, minY, maxX } = boundingBox(freshSelected);
-        const width = maxX - minX + 1;
-        const dup = useSelectionStore.getState().clipboard ?? [];
-        const newKeys = pasteCells(dup, minX + width, minY);
-        if (newKeys) setSelection(newKeys);
+        duplicateSelection();
         return;
       }
-      if (noModifier && (e.key === 'r' || e.key === 'R') && !e.repeat && selected.size > 0) {
+      if (noModifier && (e.key === 'r' || e.key === 'R') && !e.repeat && hasSelection) {
         e.preventDefault();
-        finalizePendingMove();
-        const freshSelected = useSelectionStore.getState().selected;
-        const dir = e.shiftKey ? -1 : 1;
-        const newKeys = rotateCells(freshSelected, dir);
-        if (newKeys) setSelection(newKeys);
+        rotateSelection(e.shiftKey ? -1 : 1);
         return;
       }
-      if (noModifier && (e.key === 'm' || e.key === 'M') && !e.repeat && selected.size > 0) {
+      // F/⇧F statt M/⇧M — Namenskonvention aus dem Referenzprojekt
+      // übernommen ("Flip" statt "Mirror"), auch wenn die UI weiterhin
+      // "Spiegeln" sagt.
+      if (noModifier && (e.key === 'f' || e.key === 'F') && !e.repeat && hasSelection) {
         e.preventDefault();
-        finalizePendingMove();
-        const freshSelected = useSelectionStore.getState().selected;
-        const axis = e.shiftKey ? 'y' : 'x';
-        const newKeys = mirrorCells(freshSelected, axis);
-        if (newKeys) setSelection(newKeys);
+        flipSelection(e.shiftKey ? 'y' : 'x');
         return;
       }
     };
@@ -210,7 +193,9 @@ export function useKeyboardShortcuts(getPasteAnchor?: () => [number, number] | n
     return () => window.removeEventListener('keydown', onKey);
   }, [
     tool, running, setTool, setRunning, step, undo, redo,
-    selected, clipboard, deleteCells, pasteCells, rotateCells, mirrorCells,
-    setSelection, clearSelection, copyToClipboard, getPasteAnchor,
+    selection, clipboard, hasSelection, getPasteAnchor,
+    copySelection, cutSelection, pasteClipboard, duplicateSelection,
+    deleteSelectionContents, rotateSelection, flipSelection, nudgeSelection,
+    commitFloating, clearSelection, escapeSelection,
   ]);
 }

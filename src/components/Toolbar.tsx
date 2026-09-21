@@ -1,7 +1,6 @@
 import { useUIStore }   from '../store/uiStore';
 import { useSelectionStore } from '../store/selectionStore';
 import type { Tool }    from '../canvas/input';
-import { finalizePendingMove } from '../store/selectionOps';
 
 const TOOLS: { id: Tool; icon: string; label: string; shortcut: string; color: string }[] = [
   { id: 'cable',    icon: '━', label: 'Kabel',      shortcut: '1', color: 'var(--cell-cable)'  },
@@ -19,6 +18,7 @@ const TOOLS: { id: Tool; icon: string; label: string; shortcut: string; color: s
 export function Toolbar() {
   const tool    = useUIStore(s => s.tool);
   const setTool = useUIStore(s => s.setTool);
+  const commitFloating = useSelectionStore(s => s.commitFloating);
   const clearSelection = useSelectionStore(s => s.clearSelection);
 
   return (
@@ -44,19 +44,16 @@ export function Toolbar() {
             // (kein Werkzeug aktiv, alles pannt — siehe canvas/input.ts shouldPan).
             const nextTool = tool === t.id ? null : t.id;
             // Gilt für JEDEN Wechsel WEG von "select" — auch das reine
-            // Deselektieren (nextTool=null), nicht nur der Wechsel zu einem
-            // anderen Werkzeug.
+            // Deselektieren (nextTool=null). Eine schwebende Selektion wird
+            // dabei committed (State-Machine-Regel: Werkzeugwechsel bestätigt
+            // automatisch, siehe selectionStore.ts), eine nur "selected"
+            // (nicht schwebende) Selektion wird abgewählt — sie darf einen
+            // Werkzeugwechsel nicht überleben, sonst könnte ein ANDERES
+            // Werkzeug versehentlich Zellen genau dort platzieren, wo die
+            // vergessene Selektion noch lag.
             if (tool === 'select' && nextTool !== 'select') {
-              finalizePendingMove();
-              // BUGFIX: eine Selektion blieb bisher bestehen (samt sichtbarem
-              // Rahmen UND aktiver SelectionActions-Leiste), obwohl ein
-              // komplett anderes Werkzeug aktiv wurde. Das führte dazu, dass
-              // man mit dem NEUEN Werkzeug versehentlich Zellen genau dort
-              // platzieren konnte, wo die noch "selektierten" (aber
-              // eigentlich vergessenen) Zellen lagen — setCell überschreibt
-              // ohne Rückfrage. Deselektieren gehört zum Werkzeugwechsel
-              // dazu, nicht nur das Finalisieren der Verschiebung.
-              clearSelection();
+              if (useSelectionStore.getState().selection.status === 'floating') commitFloating();
+              else clearSelection();
             }
             setTool(nextTool);
           }}

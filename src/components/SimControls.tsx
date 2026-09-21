@@ -8,13 +8,8 @@ import { useUIStore }   from '../store/uiStore';
  *   .hint-text  → ausgeblendet auf Mobile (< 600px)
  *   .step-overlay in .canvas-area → übernimmt Zähler auf Mobile
  *
- * BUGFIX: der Hilfetext war bisher IMMER der Platzieren-Hinweis
- * ("Klick: Platzieren · …"), auch wenn das Auswählen-Werkzeug aktiv war —
- * dort bedeutet Klicken/Ziehen aber etwas völlig anderes (Rechteck
- * aufziehen bzw. Selektion verschieben), und Shift/Alt für Hinzufügen/
- * Abziehen sowie R/M für Drehen/Spiegeln standen bislang NIRGENDS im UI,
- * bevor überhaupt eine Selektion existiert (SelectionActions.tsx erscheint
- * erst danach). Der Hinweis wechselt jetzt mit dem aktiven Werkzeug.
+ * Der Hilfetext wechselt mit dem aktiven Werkzeug — beim Auswählen-Werkzeug
+ * bedeutet Klicken/Ziehen etwas anderes als bei den Platzier-Werkzeugen.
  */
 export function SimControls() {
   const steps     = useGridStore(s => s.stepCount);
@@ -23,9 +18,10 @@ export function SimControls() {
   const tool      = useUIStore(s => s.tool);
 
   const hint = tool === 'select'
-    ? 'Ziehen: Auswählen · Ziehen auf Selektion: Verschieben · ⇧: Hinzufügen · ' +
-      'Alt: Abziehen · R/⇧R: Drehen · M/⇧M: Spiegeln · Strg+C/X/V/D: Kopieren/' +
-      'Ausschneiden/Einfügen/Duplizieren'
+    ? 'Ziehen: Auswählen (ersetzt vorherige Auswahl) · Ziehen auf Selektion: ' +
+      'Aufheben & Verschieben · R/⇧R: Drehen · F/⇧F: Spiegeln · Pfeiltasten: ' +
+      'zellenweise verschieben · Enter: Bestätigen · Esc: Abbrechen · ' +
+      'Strg+C/X/V/D: Kopieren/Ausschneiden/Einfügen/Duplizieren'
     : 'Klick: Platzieren · Gleicher Typ ⊕: Force · Rechtsklick/Long-Press: Löschen · ' +
       'Alt+Drag: Schwenken · Scroll/Pinch: Zoom';
 

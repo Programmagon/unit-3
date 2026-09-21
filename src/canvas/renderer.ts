@@ -1,6 +1,7 @@
 import type { Grid, CellType } from '../simulation/types';
-import { fromKey, key } from '../simulation/grid';
+import { fromKey } from '../simulation/grid';
 import { type Camera, worldToScreen } from './coordinates';
+import type { SelectionState } from './selection';
 
 export type { Camera };
 
@@ -24,12 +25,12 @@ function drawRoundedRect(
   ctx.closePath();
 }
 
-/** Kleiner Pfeil-nach-oben als "forced"-Markierung (oben rechts in der Zelle) */
+/** Kleiner Kreis mit "+" als "forced"-Markierung (oben rechts in der Zelle) */
 function drawForcedBadge(
   ctx: CanvasRenderingContext2D,
   sx: number, sy: number, z: number,
 ): void {
-  const r   = Math.max(3, z * 0.11);  // Radius des Kreises
+  const r   = Math.max(3, z * 0.11);
   const cx  = sx + z - r * 1.4;
   const cy  = sy +     r * 1.4;
   ctx.beginPath();
@@ -37,7 +38,6 @@ function drawForcedBadge(
   ctx.fillStyle   = 'rgba(255,255,255,0.9)';
   ctx.shadowBlur  = 0;
   ctx.fill();
-  // Kleines + im Kreis
   const arm = r * 0.5;
   ctx.strokeStyle = '#000';
   ctx.lineWidth   = Math.max(1, r * 0.35);
@@ -50,10 +50,8 @@ function drawForcedBadge(
 
 /**
  * Zeichnet eine einzelne Zelle (Körper + Icon + Forced-Badge) an einer
- * Bildschirmposition. Extrahiert aus der ursprünglichen renderFrame-Schleife
- * (Schritt 5b) — 1:1 dieselbe Zeichen-Logik, keine Verhaltensänderung.
- * Wird jetzt von ZWEI Stellen genutzt: renderFrame (normale Zellen) und
- * renderSelectionOverlay (selektierte Zellen an ggf. verschobener Position).
+ * Bildschirmposition. Genutzt von renderFrame (normale Grid-Zellen) UND
+ * renderSelectionOverlay (Buffer-Zellen einer schwebenden Selektion).
  */
 function drawCell(
   ctx: CanvasRenderingContext2D,
@@ -88,17 +86,17 @@ function drawCell(
   }
 }
 
+/**
+ * Zeichnet das komplette Grid. Kein Sonderfall für Selektion mehr nötig —
+ * `grid` ist zu jedem Zeitpunkt der tatsächliche, sichtbare Zustand (auch
+ * während eine Selektion schwebt: deren Quelle wurde beim Anheben bereits
+ * geleert, siehe selectionStore.ts ensureFloating). Es gibt keine separate
+ * "eigentlich woanders, aber visuell hier"-Position mehr zu überspringen.
+ */
 export function renderFrame(
   ctx: CanvasRenderingContext2D,
   grid: Grid, cam: Camera,
   width: number, height: number,
-  /**
-   * Keys, die HIER übersprungen werden (werden stattdessen von
-   * renderSelectionOverlay an ihrer — ggf. verschobenen — Position
-   * gezeichnet). Optional, damit renderFrame ohne Selektionskontext
-   * (z. B. in Tests) weiterhin exakt wie vorher funktioniert.
-   */
-  hiddenKeys?: Set<string>,
 ): void {
   const z = cam.zoom;
   ctx.fillStyle = '#0b0b1e';
@@ -117,66 +115,62 @@ export function renderFrame(
   ctx.stroke();
 
   for (const [k, cell] of grid) {
-    if (hiddenKeys?.has(k)) continue; // wird von renderSelectionOverlay gezeichnet
     const [cx, cy] = fromKey(k);
     const [sx, sy] = worldToScreen(cx, cy, cam);
     drawCell(ctx, cell.type, cell.state, cell.forced, sx, sy, z);
   }
 }
 
+function strokeRectAt(ctx: CanvasRenderingContext2D, cam: Camera, x: number, y: number, w: number, h: number, dashed: boolean): void {
+  const z = cam.zoom;
+  const [sx, sy] = worldToScreen(x, y, cam);
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,.7)';
+  ctx.lineWidth = dashed ? 1.5 : 2;
+  if (dashed) ctx.setLineDash([5, 4]);
+  ctx.strokeRect(sx + .5, sy + .5, w * z - 1, h * z - 1);
+  ctx.restore();
+}
+
 /**
- * Zeichnet die selektierten Zellen SEPARAT von renderFrame, mit ihrem
- * ECHTEN Aussehen (Farbe, Icon, Forced-Badge) an ihrer (ggf. schwebend
- * verschobenen) Position — plus einen dünnen Rahmen zur Kennzeichnung.
- * Läuft IMMER so (auch wenn offset={0,0} — kein bedingter Sonderfall).
+ * Zeichnet den Selektions-Zustand: Marquee-Vorschau und "selected" nur als
+ * gestrichelter Rahmen (der Inhalt liegt unverändert im Grid, renderFrame
+ * hat ihn bereits korrekt gezeichnet) — "floating" zusätzlich mit den
+ * tatsächlichen Buffer-Zellen (durchgezogener Rahmen: hier ist etwas aktiv
+ * aufgehoben, im Unterschied zu einer nur markierten Fläche).
  *
- * Kollisionswarnung: Während eines aktiven Verschiebens (offset != {0,0})
- * überschreibt ein Ablegen auf einer bereits belegten, NICHT selektierten
- * Zelle diese beim Commit kommentarlos (siehe remapCells in gridStore.ts —
- * bewusste, aber für den Nutzer sonst unsichtbare Kollisions-Policy). Ohne
- * visuelles Feedback bemerkt man den Datenverlust erst nach dem Loslassen.
- * Betroffene Zellen bekommen daher einen roten statt weißen Rahmen, solange
- * die Verschiebung noch schwebt (rein visuell, keine Store-Mutation).
+ * Leere Stellen im (sparse) Buffer werden bewusst NICHT übermalt — dort
+ * scheint einfach das durch, was renderFrame an dieser Bildschirmposition
+ * bereits gezeichnet hat (siehe stampBuffer-Doku in canvas/selection.ts:
+ * exakt das Verhalten, das beim Commit tatsächlich passieren würde).
  */
 export function renderSelectionOverlay(
   ctx: CanvasRenderingContext2D,
-  grid: Grid,
-  selected: Set<string>,
+  selection: SelectionState,
   cam: Camera,
-  offset: { dx: number; dy: number },
-  activeDragRect: { x0: number; y0: number; x1: number; y1: number } | null,
 ): void {
   const z = cam.zoom;
-  const isMoving = offset.dx !== 0 || offset.dy !== 0;
 
-  for (const k of selected) {
-    const cell = grid.get(k);
-    if (!cell) continue;
-    const [cx, cy] = fromKey(k);
-    const nx = cx + offset.dx, ny = cy + offset.dy;
-    const targetKey = key(nx, ny);
-    // Nur während des Verschiebens relevant — bei offset={0,0} deckt sich
-    // targetKey immer mit der eigenen (selektierten) Originalposition.
-    const collides = isMoving && grid.has(targetKey) && !selected.has(targetKey);
-    const [sx, sy] = worldToScreen(nx, ny, cam);
-    drawCell(ctx, cell.type, cell.state, cell.forced, sx, sy, z);
-    ctx.strokeStyle = collides ? 'rgba(255,68,85,.9)' : 'rgba(255,255,255,.7)';
-    ctx.lineWidth = collides ? 2 : 1.5;
-    ctx.strokeRect(sx + .5, sy + .5, z - 1, z - 1);
+  if (selection.status === 'marquee') {
+    const x0 = Math.min(selection.start.x, selection.current.x);
+    const y0 = Math.min(selection.start.y, selection.current.y);
+    const w  = Math.abs(selection.current.x - selection.start.x) + 1;
+    const h  = Math.abs(selection.current.y - selection.start.y) + 1;
+    strokeRectAt(ctx, cam, x0, y0, w, h, true);
+    return;
   }
 
-  if (activeDragRect) {
-    const { x0, y0, x1, y1 } = activeDragRect;
-    const minX = Math.min(x0, x1), maxX = Math.max(x0, x1);
-    const minY = Math.min(y0, y1), maxY = Math.max(y0, y1);
-    const [sx, sy] = worldToScreen(minX, minY, cam);
-    const w = (maxX - minX + 1) * z;
-    const h = (maxY - minY + 1) * z;
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255,255,255,.6)';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([5, 4]);
-    ctx.strokeRect(sx + .5, sy + .5, w - 1, h - 1);
-    ctx.restore();
+  if (selection.status === 'selected') {
+    strokeRectAt(ctx, cam, selection.rect.x, selection.rect.y, selection.rect.width, selection.rect.height, true);
+    return;
+  }
+
+  if (selection.status === 'floating') {
+    const { rect, buffer } = selection;
+    for (const c of buffer) {
+      const [sx, sy] = worldToScreen(rect.x + c.dx, rect.y + c.dy, cam);
+      drawCell(ctx, c.type, c.state, c.forced, sx, sy, z);
+    }
+    strokeRectAt(ctx, cam, rect.x, rect.y, rect.width, rect.height, false);
   }
 }
