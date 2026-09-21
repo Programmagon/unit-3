@@ -125,7 +125,7 @@ export interface PointerCallbacks {
   /** Wird bei pointerUp/pointerCancel aufgerufen, wenn zuvor gedraggt wurde */
   onDragEnd?: () => void;
 
-  // ─── Selektions-Werkzeug (Schritt 5) ──────────────────────────────
+  // ─── Selektions-Werkzeug ───────────────────────────────────────────
   /**
    * Rechteckauswahl fertig gezogen (Weltkoordinaten, committed).
    * modifier: 'replace' (normal), 'add' (Shift-gezogen), 'subtract' (Alt-gezogen).
@@ -140,23 +140,27 @@ export interface PointerCallbacks {
   onSelectRectPreview?: (x0: number, y0: number, x1: number, y1: number) => void;
   /** Tap außerhalb der aktuellen Selektion (kein Drag) → Selektion aufheben. */
   onSelectClear?: () => void;
-  /** Verschiebung einer bestehenden Selektion — Vorschau, noch nicht committed. */
-  onSelectMovePreview?: (dx: number, dy: number) => void;
-  /** Verschiebung committed (pointerUp nach Selektions-Drag). */
-  onSelectMoveCommit?: (dx: number, dy: number) => void;
   /**
-   * Wird aufgerufen BEVOR eine genuine neue Rechteckauswahl beginnt (d. h.
-   * der Tap trifft NICHT die aktuelle — ggf. schwebende — Selektion, oder
-   * eine Modifier-Taste war gehalten). Eine evtl. noch nicht ins Grid
-   * geschriebene Verschiebung muss vorher finalisiert werden (siehe
-   * store/selectionOps.ts finalizePendingMove).
+   * Verschiebe-Drag beginnt (Treffer auf die bestehende Selektion, Schwelle
+   * überschritten) — EINMAL pro Drag, bevor der erste onSelectDragStep folgt.
+   * Empfänger: gridStore.beginSelectionDrag (merkt sich den Ausgangszustand).
    */
-  onSelectFinalize?: () => void;
+  onSelectDragStart?: () => void;
   /**
-   * Rechteck- oder Verschiebe-Vorschau abgebrochen ohne Commit (z. B. wenn ein
+   * Live-Schritt während eines Verschiebe-Drags — (dx, dy) ist das TOTALE
+   * Delta seit Drag-Beginn (nicht inkrementell seit dem letzten Aufruf).
+   * Schreibt SOFORT ins Grid (siehe gridStore.dragSelectionTo) — es gibt
+   * keinen separaten "Vorschau, noch nicht committed"-Zustand mehr.
+   */
+  onSelectDragStep?: (dx: number, dy: number) => void;
+  /** Verschiebe-Drag committed (pointerUp nach tatsächlicher Bewegung). */
+  onSelectDragEnd?: () => void;
+  /**
+   * Rechteck- oder Verschiebe-Drag abgebrochen ohne Commit (z. B. wenn ein
    * zweiter Finger während eines Selektions-Drags aufsetzt → Pinch übernimmt).
-   * Nicht im ursprünglichen Callback-Satz, aber nötig damit keine "Geister"-
-   * Vorschau (previewOffset/activeDragRect) hängen bleibt.
+   * Für einen laufenden Verschiebe-Drag: stellt den Ausgangszustand wieder
+   * her (siehe gridStore.cancelSelectionDrag) — sicher auch dann aufzurufen,
+   * wenn gar kein Drag lief (No-Op).
    */
   onSelectCancel?: () => void;
 }
@@ -187,7 +191,7 @@ export class PointerController {
   private selectMode: "rect" | "move" | null = null;
   private selectAnchor: [number, number] | null = null;
   private selectDidDrag = false;
-  /** Gesetzt in pointerDown (Schritt 5b, Punkt 5 — Multi-Select), an onSelectRect durchgereicht. */
+  /** Gesetzt in pointerDown (Multi-Select), an onSelectRect durchgereicht. */
   private selectModifier: "replace" | "add" | "subtract" = "replace";
 
   // Pinch-Zustand
@@ -236,13 +240,13 @@ export class PointerController {
     // Rechtsklick-Löschen und Long-Press-Löschen, daher genügt der einfache
     // Vorrang hier, ohne diese anderen Zweige einzeln absichern zu müssen.
     if (this.getTool() === null) return true;
-    // BUGFIX: Beim Auswählen-Werkzeug ist Alt bereits als Abziehen-Modifier
-    // belegt (siehe pointerDown select-Zweig: modifierHeld/selectModifier).
-    // Ohne diese Ausnahme fing dieser Check JEDES Alt+Maus-Drag vorher als
-    // Schwenken ab, bevor der Selektions-Zweig überhaupt erreicht wurde —
-    // der Abziehen-Modifier war über Maus dadurch praktisch unerreichbar
-    // (Touch/Stift kennen kein Alt und waren nicht betroffen). Mittlere
-    // Maustaste bleibt als Pan-Auslöser bestehen, die kollidiert mit nichts.
+    // Beim Auswählen-Werkzeug ist Alt bereits als Abziehen-Modifier belegt
+    // (siehe pointerDown select-Zweig: modifierHeld/selectModifier). Ohne
+    // diese Ausnahme würde JEDES Alt+Maus-Drag vorher als Schwenken
+    // abgefangen, bevor der Selektions-Zweig überhaupt erreicht wird — der
+    // Abziehen-Modifier wäre über Maus praktisch unerreichbar (Touch/Stift
+    // kennen kein Alt und sind nicht betroffen). Mittlere Maustaste bleibt
+    // als Pan-Auslöser bestehen, die kollidiert mit nichts.
     if (this.getTool() === "select") {
       return e.pointerType === "mouse" && e.button === 1;
     }
@@ -422,11 +426,9 @@ export class PointerController {
       // will die Auswahl anpassen, nicht etwas verschieben).
       const modifierHeld = e.shiftKey || e.altKey;
       const isHit = !modifierHeld && this.getSelectionHit(cx, cy);
-      if (!isHit) {
-        // Genuine neue Rechteckauswahl beginnt → evtl. schwebende
-        // Verschiebung MUSS vorher finalisiert werden.
-        this.cb.onSelectFinalize?.();
-      }
+      // Kein "erst finalisieren"-Callback mehr nötig — es gibt nichts
+      // Schwebendes, das Grid ist immer der aktuelle, sichtbare Zustand
+      // (siehe selectionOps.ts Architektur-Notiz).
       this.selectAnchor = [cx, cy];
       this.selectMode = isHit ? "move" : "rect";
       this.selectModifier = e.shiftKey ? "add" : e.altKey ? "subtract" : "replace";
@@ -483,6 +485,10 @@ export class PointerController {
       );
       if (!this.selectDidDrag && dist >= this.tapThreshold(p.type)) {
         this.selectDidDrag = true;
+        // Verschiebe-Drag beginnt genau JETZT (Schwelle gerade überschritten,
+        // nicht schon bei pointerDown) — beginSelectionDrag merkt sich den
+        // Ausgangszustand für diesen einen Drag.
+        if (this.selectMode === "move") this.cb.onSelectDragStart?.();
       }
       if (!this.selectDidDrag) return; // noch unentschieden: Tap oder Drag?
 
@@ -491,7 +497,9 @@ export class PointerController {
       if (this.selectMode === "rect") {
         this.cb.onSelectRectPreview?.(anchor[0], anchor[1], cx, cy);
       } else {
-        this.cb.onSelectMovePreview?.(cx - anchor[0], cy - anchor[1]);
+        // Totales Delta seit Drag-Beginn, nicht inkrementell — siehe
+        // gridStore.dragSelectionTo-Doku (vermeidet Drift).
+        this.cb.onSelectDragStep?.(cx - anchor[0], cy - anchor[1]);
       }
       return;
     }
@@ -547,16 +555,18 @@ export class PointerController {
           if (this.selectMode === "rect") {
             this.cb.onSelectRect?.(anchor[0], anchor[1], cx, cy, this.selectModifier);
           } else {
-            const dx = cx - anchor[0], dy = cy - anchor[1];
-            // Nulldelta nicht committen — kein leerer Undo-Schritt für
-            // eine Selektion, die nur angetippt, aber nie bewegt wurde.
-            if (dx !== 0 || dy !== 0) this.cb.onSelectMoveCommit?.(dx, dy);
+            // Letzten Schritt mit der finalen Loslass-Position sicherstellen
+            // (kann geringfügig von der letzten pointerMove-Position
+            // abweichen), dann den Drag abschließen (EIN Undo-Schritt).
+            this.cb.onSelectDragStep?.(cx - anchor[0], cy - anchor[1]);
+            this.cb.onSelectDragEnd?.();
           }
         } else if (this.selectMode === "rect") {
           // Reiner Tap außerhalb der Selektion (kein Hit, keine Bewegung) → aufheben.
           this.cb.onSelectClear?.();
         }
-        // Reiner Tap im 'move'-Modus ohne Bewegung → No-Op, Selektion bleibt.
+        // Reiner Tap im 'move'-Modus ohne Bewegung → No-Op (kein
+        // onSelectDragStart wurde je gefeuert, nichts zu beenden).
         this.selectMode = null;
         this.selectAnchor = null;
         this.selectDidDrag = false;
@@ -591,6 +601,10 @@ export class PointerController {
 
     if (this.selectMode !== null) {
       if (this.pointers.size === 0) {
+        // Sicher auch dann aufzurufen, wenn selectMode='rect' war (kein
+        // Grid-Zustand zu revertieren) oder noch gar kein Drag begonnen
+        // hatte (onSelectCancel/cancelSelectionDrag sind für diese Fälle
+        // No-Ops) — siehe onSelectCancel-Doku oben.
         this.cb.onSelectCancel?.();
         this.selectMode = null;
         this.selectAnchor = null;

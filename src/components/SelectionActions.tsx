@@ -1,7 +1,7 @@
 import { useSelectionStore } from '../store/selectionStore';
 import { useGridStore }      from '../store/gridStore';
 import { boundingBox }       from '../canvas/selection';
-import { finalizePendingMove, centeredPasteAnchor } from '../store/selectionOps';
+import { centeredPasteAnchor } from '../store/selectionOps';
 import { serializeSelection } from '../lib/serializer';
 import { saveToFile }         from '../lib/fileIO';
 
@@ -13,30 +13,23 @@ interface SelectionActionsProps {
 /**
  * Kontextabhängige Mini-Toolbar für die aktuelle Selektion UND die
  * Zwischenablage. Sichtbar wenn `selected.size > 0` ODER eine Zwischenablage
- * existiert (Schritt 5b, Punkt 4 — Einfügen muss auch ohne aktive Selektion
- * per Touch erreichbar sein, nicht nur über Strg+V).
+ * existiert (Einfügen muss auch ohne aktive Selektion per Touch erreichbar
+ * sein, nicht nur über Strg+V).
  * Schwebt über dem Canvas (analog zu .step-overlay), zentriert am unteren Rand.
  *
- * UX-Überarbeitung: vormals reine Icon-Buttons mit `title`-Tooltip. Auf
- * Touch-Geräten (iPad!) lösen title-Tooltips aber gar nicht erst aus — bei
- * 10 dicht gepackten Icons (📌 für Einfügen, ⇋/⇵ für Spiegeln, …) war für
- * Touch-Nutzer nicht erkennbar, was welcher Button tut, außer durch
- * Ausprobieren. Buttons zeigen jetzt zusätzlich ein Text-Label (per
- * `.btn-label`, gleiche Konvention wie Toolbar.tsx/SimBar.tsx) sowie ein
- * `aria-label`. Die Gruppen (Zwischenablage / Transformieren / Exportieren /
- * Löschen) sind durch Trenner (`.sel-action-divider`, Optik wie in
- * SimBar.tsx) visuell abgesetzt. `.selection-actions` hatte bereits
- * `flex-wrap: wrap` — Gruppen brechen auf schmalen Bildschirmen einfach in
- * eine neue Zeile um, statt abgeschnitten zu werden.
+ * Buttons zeigen Icon + Text-Label (`.btn-label`, gleiche Konvention wie
+ * Toolbar.tsx/SimBar.tsx) sowie `aria-label` — title-Tooltips lösen auf
+ * Touch-Geräten (iPad!) nicht aus. Die Gruppen (Zwischenablage /
+ * Transformieren / Exportieren / Löschen) sind durch Trenner
+ * (`.sel-action-divider`) visuell abgesetzt.
  *
- * WICHTIG (Bugfix): `selected`/`grid` sind React-Closure-Werte vom letzten
- * Render. `finalizePendingMove()` mutiert die Stores zwar SOFORT (Zustand-
- * Updates sind synchron), aber diese bereits erfassten lokalen Variablen
- * werden dadurch NICHT automatisch aktuell — die laufende Funktion sieht
- * weiterhin den alten Stand. Jeder Handler, der nach finalizePendingMove()
- * noch Grid- oder Selektionsdaten braucht, liest sie deshalb explizit über
- * .getState() neu — sonst arbeitet er mit Positionen, die es im Grid gar
- * nicht mehr gibt (Ergebnis: leere Zwischenablage, leere Selektion).
+ * Kein "erst finalisieren" mehr nötig (anders als in früheren Versionen):
+ * `selected` ist immer die aktuelle, im Grid tatsächlich vorhandene
+ * Position, siehe gridStore.ts/selectionOps.ts. `selected` als React-Closure-
+ * Wert ist hier deshalb überall sicher direkt nutzbar — AUSSER unmittelbar
+ * NACH copyToClipboard() (siehe handleDuplicate): das mutiert `clipboard`
+ * synchron, aber die Closure-Variable `clipboard` von oben zieht das erst
+ * beim NÄCHSTEN Render nach — dort weiterhin bewusst .getState() nötig.
  */
 export function SelectionActions({ getPasteAnchor }: SelectionActionsProps) {
   const selected        = useSelectionStore(s => s.selected);
@@ -55,73 +48,54 @@ export function SelectionActions({ getPasteAnchor }: SelectionActionsProps) {
   if (!hasSelection && !hasClipboard) return null;
 
   const handleCopy = () => {
-    finalizePendingMove();
     copyToClipboard(useGridStore.getState().grid);
   };
 
   const handleCut = () => {
     // Ausschneiden = Kopieren + Löschen, ein Undo-Schritt (deleteCells).
-    finalizePendingMove();
-    const freshSelected = useSelectionStore.getState().selected;
     copyToClipboard(useGridStore.getState().grid);
-    deleteCells(freshSelected);
-    // clearSelection() statt setSelection(new Set()) — setzt pendingOffset
-    // atomar mit zurück, statt sich darauf zu verlassen, dass es durch
-    // finalizePendingMove() weiter oben schon bei {0,0} steht.
+    deleteCells(selected);
     clearSelection();
   };
 
   const handleDuplicate = () => {
     // Gleiche DRY-Begründung wie in useKeyboardShortcuts.ts (Strg+D):
     // nutzt copyToClipboard + pasteCells, überschreibt dabei den Strg+C-Inhalt.
-    finalizePendingMove();
-    const freshSelected = useSelectionStore.getState().selected;
     copyToClipboard(useGridStore.getState().grid);
     // Versatz um die volle Breite statt fixem (1,1) — garantiert KEINE
-    // Überlappung mit dem Original, unabhängig von der Formgröße. Ein
-    // fixer (1,1)-Versatz überlappte bei Formen ≥2×2 eine Ecke und
-    // überschrieb dort sofort eine Original-Zelle.
-    const { minX, minY, maxX } = boundingBox(freshSelected);
+    // Überlappung mit dem Original, unabhängig von der Formgröße.
+    const { minX, minY, maxX } = boundingBox(selected);
     const width = maxX - minX + 1;
+    // copyToClipboard() mutiert clipboard synchron — die Closure-Variable
+    // `clipboard` von oben zieht das erst beim nächsten Render nach, hier
+    // bewusst frisch aus dem Store lesen (siehe Doku oben).
     const dup = useSelectionStore.getState().clipboard ?? [];
     const newKeys = pasteCells(dup, minX + width, minY);
-    // null = Zielposition überschneidet sich mit FREMDEM Inhalt (z. B. einer
-    // anderen Form direkt rechts daneben) — pasteCells hat nichts geschrieben,
-    // Selektion bleibt unverändert bestehen statt sie auf nichts zu setzen.
+    // null = Zielposition überschneidet sich mit fremdem Inhalt (z. B. einer
+    // anderen Form direkt rechts daneben) — nichts geschrieben, Selektion
+    // bleibt unverändert bestehen statt sie auf nichts zu setzen.
     if (newKeys) setSelection(newKeys);
   };
 
   const handleRotate = (dir: 1 | -1) => {
-    finalizePendingMove();
-    const freshSelected = useSelectionStore.getState().selected;
-    const newKeys = rotateCells(freshSelected, dir);
-    // null = die gedrehte Form würde fremde Zellen überschreiben (siehe
-    // rotateCells-Doku in gridStore.ts) — nichts passiert, Selektion bleibt
-    // unverändert an ihrer alten Position/Ausrichtung stehen.
+    const newKeys = rotateCells(selected, dir);
+    // null = die gedrehte Form würde fremde Zellen überschreiben — nichts
+    // passiert, Selektion bleibt an ihrer alten Position/Ausrichtung stehen.
     if (newKeys) setSelection(newKeys);
   };
 
   const handleMirror = (axis: 'x' | 'y') => {
-    finalizePendingMove();
-    const freshSelected = useSelectionStore.getState().selected;
-    const newKeys = mirrorCells(freshSelected, axis);
+    const newKeys = mirrorCells(selected, axis);
     if (newKeys) setSelection(newKeys);
   };
 
   const handleDelete = () => {
-    finalizePendingMove();
-    const freshSelected = useSelectionStore.getState().selected;
-    deleteCells(freshSelected);
+    deleteCells(selected);
     clearSelection();
   };
 
   const handlePaste = () => {
     if (!clipboard || clipboard.length === 0) return;
-    // Bugfix: eine evtl. noch schwebende (nicht finalisierte) Verschiebung
-    // MUSS vor dem Einfügen geschrieben werden — sonst "erbt" die neu
-    // eingefügte Selektion später fälschlich den alten pendingOffset (siehe
-    // finalizePendingMove-Dokumentation).
-    finalizePendingMove();
     const anchor = getPasteAnchor() ?? [0, 0];
     // Zentriert einfügen statt linksbündig — siehe centeredPasteAnchor-Doku.
     const [atX, atY] = centeredPasteAnchor(clipboard, anchor[0], anchor[1]);
@@ -132,15 +106,13 @@ export function SelectionActions({ getPasteAnchor }: SelectionActionsProps) {
   };
 
   const handleExport = async () => {
-    finalizePendingMove();
-    const freshSelected = useSelectionStore.getState().selected;
-    const freshGrid = useGridStore.getState().grid;
+    const grid = useGridStore.getState().grid;
     // Export liest die AKTUELLE Selektion, nicht die Zwischenablage — falls
     // beide unterschiedlich sind (z. B. selektiert, aber noch nicht kopiert),
     // exportieren wir das, was gerade sichtbar markiert ist.
-    const { minX, minY } = boundingBox(freshSelected);
-    const cells = [...freshSelected].flatMap(k => {
-      const cell = freshGrid.get(k);
+    const { minX, minY } = boundingBox(selected);
+    const cells = [...selected].flatMap(k => {
+      const cell = grid.get(k);
       if (!cell) return [];
       const [x, y] = k.split(',').map(Number);
       return [{ dx: x - minX, dy: y - minY, type: cell.type, state: cell.state, forced: cell.forced ?? false }];

@@ -1,5 +1,5 @@
 import type { Grid, CellType } from '../simulation/types';
-import { fromKey, key } from '../simulation/grid';
+import { fromKey } from '../simulation/grid';
 import { type Camera, worldToScreen } from './coordinates';
 
 export type { Camera };
@@ -50,10 +50,7 @@ function drawForcedBadge(
 
 /**
  * Zeichnet eine einzelne Zelle (Körper + Icon + Forced-Badge) an einer
- * Bildschirmposition. Extrahiert aus der ursprünglichen renderFrame-Schleife
- * (Schritt 5b) — 1:1 dieselbe Zeichen-Logik, keine Verhaltensänderung.
- * Wird jetzt von ZWEI Stellen genutzt: renderFrame (normale Zellen) und
- * renderSelectionOverlay (selektierte Zellen an ggf. verschobener Position).
+ * Bildschirmposition.
  */
 function drawCell(
   ctx: CanvasRenderingContext2D,
@@ -88,17 +85,17 @@ function drawCell(
   }
 }
 
+/**
+ * Zeichnet das komplette Grid. KEIN Sonderfall mehr für selektierte Zellen —
+ * `grid` ist immer der tatsächliche, sichtbare Zustand (auch während eines
+ * laufenden Selektions-Drags, siehe gridStore.dragSelectionTo), es gibt
+ * keine separate "schwebende" Position mehr, die hier übersprungen und
+ * anderswo nachgezeichnet werden müsste.
+ */
 export function renderFrame(
   ctx: CanvasRenderingContext2D,
   grid: Grid, cam: Camera,
   width: number, height: number,
-  /**
-   * Keys, die HIER übersprungen werden (werden stattdessen von
-   * renderSelectionOverlay an ihrer — ggf. verschobenen — Position
-   * gezeichnet). Optional, damit renderFrame ohne Selektionskontext
-   * (z. B. in Tests) weiterhin exakt wie vorher funktioniert.
-   */
-  hiddenKeys?: Set<string>,
 ): void {
   const z = cam.zoom;
   ctx.fillStyle = '#0b0b1e';
@@ -117,7 +114,6 @@ export function renderFrame(
   ctx.stroke();
 
   for (const [k, cell] of grid) {
-    if (hiddenKeys?.has(k)) continue; // wird von renderSelectionOverlay gezeichnet
     const [cx, cy] = fromKey(k);
     const [sx, sy] = worldToScreen(cx, cy, cam);
     drawCell(ctx, cell.type, cell.state, cell.forced, sx, sy, z);
@@ -125,43 +121,27 @@ export function renderFrame(
 }
 
 /**
- * Zeichnet die selektierten Zellen SEPARAT von renderFrame, mit ihrem
- * ECHTEN Aussehen (Farbe, Icon, Forced-Badge) an ihrer (ggf. schwebend
- * verschobenen) Position — plus einen dünnen Rahmen zur Kennzeichnung.
- * Läuft IMMER so (auch wenn offset={0,0} — kein bedingter Sonderfall).
- *
- * Kollisionswarnung: Während eines aktiven Verschiebens (offset != {0,0})
- * überschreibt ein Ablegen auf einer bereits belegten, NICHT selektierten
- * Zelle diese beim Commit kommentarlos (siehe remapCells in gridStore.ts —
- * bewusste, aber für den Nutzer sonst unsichtbare Kollisions-Policy). Ohne
- * visuelles Feedback bemerkt man den Datenverlust erst nach dem Loslassen.
- * Betroffene Zellen bekommen daher einen roten statt weißen Rahmen, solange
- * die Verschiebung noch schwebt (rein visuell, keine Store-Mutation).
+ * Zeichnet nur noch den Auswahl-RAHMEN um die selektierten Zellen (deren
+ * tatsächlicher Inhalt wird bereits von renderFrame korrekt gezeichnet,
+ * da `selected` immer die aktuelle, im Grid tatsächlich vorhandene Position
+ * ist — keine separate Vorschau-Position mehr). Keine Kollisionswarnung
+ * mehr nötig: eine Kollision kann strukturell nicht mehr passieren
+ * (gridStore.dragSelectionTo/rotateCells/mirrorCells/pasteCells lehnen sie
+ * ab, statt sie stillschweigend zu committen — siehe selectionOps.ts).
  */
 export function renderSelectionOverlay(
   ctx: CanvasRenderingContext2D,
-  grid: Grid,
   selected: Set<string>,
   cam: Camera,
-  offset: { dx: number; dy: number },
   activeDragRect: { x0: number; y0: number; x1: number; y1: number } | null,
 ): void {
   const z = cam.zoom;
-  const isMoving = offset.dx !== 0 || offset.dy !== 0;
 
+  ctx.strokeStyle = 'rgba(255,255,255,.7)';
+  ctx.lineWidth = 1.5;
   for (const k of selected) {
-    const cell = grid.get(k);
-    if (!cell) continue;
     const [cx, cy] = fromKey(k);
-    const nx = cx + offset.dx, ny = cy + offset.dy;
-    const targetKey = key(nx, ny);
-    // Nur während des Verschiebens relevant — bei offset={0,0} deckt sich
-    // targetKey immer mit der eigenen (selektierten) Originalposition.
-    const collides = isMoving && grid.has(targetKey) && !selected.has(targetKey);
-    const [sx, sy] = worldToScreen(nx, ny, cam);
-    drawCell(ctx, cell.type, cell.state, cell.forced, sx, sy, z);
-    ctx.strokeStyle = collides ? 'rgba(255,68,85,.9)' : 'rgba(255,255,255,.7)';
-    ctx.lineWidth = collides ? 2 : 1.5;
+    const [sx, sy] = worldToScreen(cx, cy, cam);
     ctx.strokeRect(sx + .5, sy + .5, z - 1, z - 1);
   }
 

@@ -1,5 +1,4 @@
 import { useGridStore } from '../store/gridStore';
-import { finalizePendingMove } from '../store/selectionOps';
 
 interface SimBarProps {
   /** Speichert Grid + Kamera als .u3-Datei. Wird von App.tsx implementiert. */
@@ -85,7 +84,7 @@ export function SimBar({ onSave, onLoad, onImportSelection }: SimBarProps) {
       {/* Schritt */}
       <button
         className="sim-btn"
-        onClick={() => { if (!running) { finalizePendingMove(); step(); } }}
+        onClick={() => { if (!running) step(); }}
         disabled={running}
         style={{
           background:  'transparent',
@@ -101,7 +100,7 @@ export function SimBar({ onSave, onLoad, onImportSelection }: SimBarProps) {
       {/* Play / Pause */}
       <button
         className="sim-btn"
-        onClick={() => { if (!running) finalizePendingMove(); setRunning(!running); }}
+        onClick={() => setRunning(!running)}
         style={{
           background:  running ? 'var(--sim-red)' : 'var(--sim-green)',
           color:       '#000',

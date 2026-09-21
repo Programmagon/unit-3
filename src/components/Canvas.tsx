@@ -8,7 +8,6 @@ import { zoomAtPoint, getCellAt } from '../canvas/coordinates';
 import type { Camera }       from '../canvas/coordinates';
 import type { Tool }         from '../canvas/input';
 import { cellsInRect } from '../canvas/selection';
-import { finalizePendingMove } from '../store/selectionOps';
 
 // Kamera-Startwert — lebt als Ref, kein Zustand, keine React-Re-Renders
 const INITIAL_CAMERA: Camera = { x: -15, y: -9, zoom: 36 };
@@ -16,25 +15,24 @@ const INITIAL_CAMERA: Camera = { x: -15, y: -9, zoom: 36 };
 /**
  * Von außen (App.tsx / SimBar) erreichbare Kamera-Schnittstelle.
  * Nötig, weil die Kamera bewusst NICHT im Store lebt (siehe cameraRef unten) —
- * Save/Load braucht trotzdem Lese-/Schreibzugriff für Schritt 4.
+ * Save/Load braucht trotzdem Lese-/Schreibzugriff.
  */
 export interface CanvasHandle {
   getCameraSnapshot: () => Camera;
   setCameraSnapshot: (cam: Camera) => void;
   /**
    * Letzte bekannte Pointer-Zellposition — null falls noch nie ein Pointer-
-   * Event stattfand. Nicht Teil des Save/Load-Kontrakts (Schritt 4), sondern
-   * neu für Schritt 5: Strg+V soll "an letzter bekannter Zeigerposition"
+   * Event stattfand. Strg+V soll "an letzter bekannter Zeigerposition"
    * einfügen, aber useKeyboardShortcuts.ts hat keinen eigenen Zugriff auf
    * Pointer-Position oder Kamera (beide leben nur hier in Canvas.tsx-Refs).
    */
   getLastPointerCell: () => [number, number] | null;
   /**
    * Zell-Position in der Mitte des aktuell sichtbaren Canvas-Ausschnitts.
-   * Neu für Schritt 5b, Punkt 3: der Einfügen-BUTTON (im Unterschied zu
-   * Strg+V, das die Mausposition sinnvoll nutzen kann) hat auf Touch-
-   * Geräten kein Äquivalent zu einer "Zeigerposition" — dort ist die
-   * Bildschirmmitte der einzige vorhersagbare, immer sichtbare Ankerpunkt.
+   * Der Einfügen-BUTTON (im Unterschied zu Strg+V, das die Mausposition
+   * sinnvoll nutzen kann) hat auf Touch-Geräten kein Äquivalent zu einer
+   * "Zeigerposition" — dort ist die Bildschirmmitte der einzige
+   * vorhersagbare, immer sichtbare Ankerpunkt.
    */
   getViewportCenterCell: () => [number, number];
 }
@@ -86,30 +84,27 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
   const gridRef      = useRef(grid);
   gridRef.current    = grid; // immer aktuell für Event-Handler
 
+  // ── Selektions-Drag (Live-Modell, siehe gridStore.ts/selectionOps.ts) ──
+  const beginSelectionDrag  = useGridStore(s => s.beginSelectionDrag);
+  const dragSelectionTo     = useGridStore(s => s.dragSelectionTo);
+  const endSelectionDrag    = useGridStore(s => s.endSelectionDrag);
+  const cancelSelectionDrag = useGridStore(s => s.cancelSelectionDrag);
+
   // ── Werkzeug ──────────────────────────────────────────────────────────
   const tool      = useUIStore(s => s.tool);
   const toolRef   = useRef<Tool | null>(tool);
   useEffect(() => { toolRef.current = tool; }, [tool]);
 
   // ── Selektion ─────────────────────────────────────────────────────────
+  // `selected` ist IMMER die aktuelle, im Grid tatsächlich vorhandene
+  // Position — kein separater "pending"/Vorschau-Zustand mehr (siehe
+  // gridStore.dragSelectionTo, das Grid UND Selektion atomar zusammen hält).
   const selected      = useSelectionStore(s => s.selected);
   const setSelection  = useSelectionStore(s => s.setSelection);
   const clearSelection = useSelectionStore(s => s.clearSelection);
   const selectedRef   = useRef(selected);
   selectedRef.current = selected; // immer aktuell für Event-Handler
-  // Angesammelte, noch nicht ins Grid geschriebene Verschiebung (Schritt 5b,
-  // "Schwebende Verschiebung"). Reaktiv abonniert wie selected/tool.
-  const pendingOffset    = useSelectionStore(s => s.pendingOffset);
-  const setPendingOffset = useSelectionStore(s => s.setPendingOffset);
-  const pendingOffsetRef = useRef(pendingOffset);
-  pendingOffsetRef.current = pendingOffset;
-  /**
-   * Live-Vorschau beim Verschieben — rein visuell, kein Store-Update pro
-   * pointermove. Enthält NUR das Delta des AKTUELL laufenden Drags, nicht
-   * die gesamte angesammelte (pending) Verschiebung.
-   */
-  const previewOffsetRef = useRef<{ dx: number; dy: number } | null>(null);
-  /** Live-Vorschau beim Aufziehen eines neuen Rechtecks — ebenfalls rein visuell. */
+  /** Live-Vorschau beim Aufziehen eines neuen Rechtecks — rein visuell, kein Store-Update pro pointermove. */
   const activeDragRectRef = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
 
   // ── Zeichnen ──────────────────────────────────────────────────────────
@@ -119,14 +114,9 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
     const ctx = c.getContext('2d')!;
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    renderFrame(ctx, gridRef.current, cameraRef.current, c.clientWidth, c.clientHeight, selectedRef.current);
-    const totalOffset = {
-      dx: pendingOffsetRef.current.dx + (previewOffsetRef.current?.dx ?? 0),
-      dy: pendingOffsetRef.current.dy + (previewOffsetRef.current?.dy ?? 0),
-    };
+    renderFrame(ctx, gridRef.current, cameraRef.current, c.clientWidth, c.clientHeight);
     renderSelectionOverlay(
-      ctx, gridRef.current, selectedRef.current, cameraRef.current,
-      totalOffset, activeDragRectRef.current,
+      ctx, selectedRef.current, cameraRef.current, activeDragRectRef.current,
     );
   }, []); // keine Deps — liest aus stabilen Refs
 
@@ -145,9 +135,8 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
 
   // Grid-Änderung (Zustand) → dirty markieren → rAF zeichnet nächsten Frame
   useEffect(() => { dirtyRef.current = true; }, [grid]);
-  // Selektions-Änderung (z. B. Esc, SelectionActions-Buttons) → ebenfalls dirty
+  // Selektions-Änderung (z. B. Esc, SelectionActions-Buttons, Drag-Schritte) → ebenfalls dirty
   useEffect(() => { dirtyRef.current = true; }, [selected]);
-  useEffect(() => { dirtyRef.current = true; }, [pendingOffset]);
 
   // ── HiDPI-Resize ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -224,7 +213,7 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
           endBatch();
         },
 
-        // ─── Selektions-Werkzeug (Schritt 5 / 5b) ────────────────────
+        // ─── Selektions-Werkzeug ──────────────────────────────────────
         onSelectRect: (x0, y0, x1, y1, modifier) => {
           const rectKeys = cellsInRect(x0, y0, x1, y1);
           const g = gridRef.current;
@@ -249,47 +238,39 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
         },
 
         onSelectClear: () => {
-          finalizePendingMove();
           clearSelection();
           dirtyRef.current = true;
         },
 
-        onSelectMovePreview: (dx, dy) => {
-          previewOffsetRef.current = { dx, dy }; // Delta NUR des laufenden Drags
+        // Live-Modell: schreibt SOFORT ins Grid (siehe gridStore.ts) — kein
+        // separater Vorschau-/Pending-Zustand mehr.
+        onSelectDragStart: () => {
+          beginSelectionDrag(selectedRef.current);
+        },
+
+        onSelectDragStep: (dx, dy) => {
+          dragSelectionTo(dx, dy);
           dirtyRef.current = true;
         },
 
-        // Schreibt NICHT mehr direkt ins Grid — sammelt stattdessen im
-        // schwebenden pendingOffset an. Erst finalizePendingMove() (bei der
-        // nächsten "genuinen" Selektions-Aktion) schreibt final ins Grid.
-        onSelectMoveCommit: (dx, dy) => {
-          setPendingOffset({
-            dx: pendingOffsetRef.current.dx + dx,
-            dy: pendingOffsetRef.current.dy + dy,
-          });
-          previewOffsetRef.current = null;
-          dirtyRef.current = true;
-        },
-
-        onSelectFinalize: () => {
-          finalizePendingMove();
+        onSelectDragEnd: () => {
+          endSelectionDrag();
           dirtyRef.current = true;
         },
 
         onSelectCancel: () => {
-          previewOffsetRef.current = null;
+          // No-Op falls gar kein Verschiebe-Drag lief (z. B. reine
+          // Rechteckauswahl im Gange) — siehe cancelSelectionDrag-Doku.
+          cancelSelectionDrag();
           activeDragRectRef.current = null;
           dirtyRef.current = true;
         },
       },
       () => cameraRef.current,
       () => toolRef.current,
-      // Hit-Test gegen die AKTUELLE sichtbare (ggf. schwebende) Position —
-      // nicht gegen die rohen Original-Keys.
-      (cx, cy) => {
-        const off = pendingOffsetRef.current;
-        return selectedRef.current.has(`${cx - off.dx},${cy - off.dy}`);
-      },
+      // Hit-Test: `selected` ist immer die aktuelle, sichtbare Position —
+      // keine Offset-Rechnung mehr nötig (anders als im alten pendingOffset-Modell).
+      (cx, cy) => selectedRef.current.has(`${cx},${cy}`),
     );
 
     ctrlRef.current = ctrl;

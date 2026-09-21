@@ -1,7 +1,6 @@
 import { useUIStore }   from '../store/uiStore';
 import { useSelectionStore } from '../store/selectionStore';
 import type { Tool }    from '../canvas/input';
-import { finalizePendingMove } from '../store/selectionOps';
 
 const TOOLS: { id: Tool; icon: string; label: string; shortcut: string; color: string }[] = [
   { id: 'cable',    icon: '━', label: 'Kabel',      shortcut: '1', color: 'var(--cell-cable)'  },
@@ -43,21 +42,12 @@ export function Toolbar() {
             // Erneuter Klick auf das bereits aktive Werkzeug → deselektieren
             // (kein Werkzeug aktiv, alles pannt — siehe canvas/input.ts shouldPan).
             const nextTool = tool === t.id ? null : t.id;
-            // Gilt für JEDEN Wechsel WEG von "select" — auch das reine
-            // Deselektieren (nextTool=null), nicht nur der Wechsel zu einem
-            // anderen Werkzeug.
-            if (tool === 'select' && nextTool !== 'select') {
-              finalizePendingMove();
-              // BUGFIX: eine Selektion blieb bisher bestehen (samt sichtbarem
-              // Rahmen UND aktiver SelectionActions-Leiste), obwohl ein
-              // komplett anderes Werkzeug aktiv wurde. Das führte dazu, dass
-              // man mit dem NEUEN Werkzeug versehentlich Zellen genau dort
-              // platzieren konnte, wo die noch "selektierten" (aber
-              // eigentlich vergessenen) Zellen lagen — setCell überschreibt
-              // ohne Rückfrage. Deselektieren gehört zum Werkzeugwechsel
-              // dazu, nicht nur das Finalisieren der Verschiebung.
-              clearSelection();
-            }
+            // Eine Selektion darf ein anderes Werkzeug nicht überleben — sonst
+            // könnte man mit dem neuen Werkzeug versehentlich Zellen genau
+            // dort platzieren, wo die vergessene Selektion noch lag (setCell
+            // überschreibt ohne Rückfrage). Gilt für JEDEN Wechsel WEG von
+            // "select", auch das reine Deselektieren (nextTool=null).
+            if (tool === 'select' && nextTool !== 'select') clearSelection();
             setTool(nextTool);
           }}
           style={{

@@ -10,7 +10,6 @@ import { useSelectionStore } from './store/selectionStore';
 import { useKeyboardShortcuts } from './store/useKeyboardShortcuts';
 import { serialize, deserialize, SerializeError, deserializeSelection } from './lib/serializer';
 import { saveToFile, loadFromFile } from './lib/fileIO';
-import { finalizePendingMove } from './store/selectionOps';
 
 /** `unit3-projekt-YYYY-MM-DD.u3` — Datum wird beim Speichern generiert. */
 function suggestedFilename() {
@@ -24,6 +23,7 @@ export default function App() {
   const hz        = useGridStore(s => s.hz);
   const steps     = useGridStore(s => s.stepCount);
   const cells     = useGridStore(s => s.grid.size);
+  const grid      = useGridStore(s => s.grid);
   const loadGrid  = useGridStore(s => s.loadGrid);
   const setRunning = useGridStore(s => s.setRunning);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -50,17 +50,7 @@ export default function App() {
   const handleSave = async () => {
     const camera = canvasRef.current?.getCameraSnapshot();
     if (!camera) return; // Canvas noch nicht bereit
-    // BUGFIX (Regelset siehe selectionOps.ts): Speichern muss den ECHTEN
-    // Grid-Zustand exportieren. Ohne Finalisieren würde bei schwebender
-    // Verschiebung eine .u3-Datei entstehen, die die alte (unverschobene)
-    // Position enthält, obwohl der Canvas die neue zeigt. Die `grid`-
-    // Variable oben ist an den LETZTEN Render gebunden — finalizePendingMove()
-    // mutiert den Store synchron, aber dieser Render-Snapshot zieht erst beim
-    // NÄCHSTEN Render nach. Deshalb hier bewusst frisch aus dem Store lesen
-    // (gleiches Muster wie SelectionActions.tsx handleExport).
-    finalizePendingMove();
-    const freshGrid = useGridStore.getState().grid;
-    const json = serialize(freshGrid, camera);
+    const json = serialize(grid, camera);
     try {
       await saveToFile(json, suggestedFilename(), 'Unit-3 Datei', { 'application/json': ['.u3'] });
     } catch {

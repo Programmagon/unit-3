@@ -8,11 +8,11 @@ import { translateKeys, rotateKeys, mirrorKeys } from '../canvas/selection';
 // ClipboardCell gehört konzeptionell zu selectionStore (verwaltet die
 // Zwischenablage); gridStore braucht den Typ nur für die pasteCells-Signatur.
 import type { ClipboardCell } from './selectionStore';
-// Laufzeit-Import (bewusst, Schritt 5b Punkt 7): undo/redo müssen eine evtl.
-// schwebende Selektions-Verschiebung VERWERFEN (nicht finalisieren — der
-// alte Grid-Zustand, auf den sie sich bezog, wird gerade verlassen). Kein
-// struktureller Zyklus: selectionStore.ts importiert nichts aus gridStore.ts,
-// also bleibt die Abhängigkeit einseitig (gridStore → selectionStore).
+// Laufzeit-Import: undo/redo/clear/load müssen die Selektion aufheben, wenn
+// sich der Grid-Zustand unter ihr wegändert (siehe dort). Selection-Drag
+// (beginSelectionDrag/dragSelectionTo/...) hält Grid und Selektion synchron.
+// Kein struktureller Zyklus: selectionStore.ts importiert nichts aus
+// gridStore.ts, die Abhängigkeit bleibt einseitig (gridStore → selectionStore).
 import { useSelectionStore } from './selectionStore';
 
 /** Maximale Größe von Undo-/Redo-Stack — älteste Einträge fallen heraus. */
@@ -20,9 +20,12 @@ const MAX_UNDO = 60;
 
 /**
  * Rein intern, bewusst außerhalb des Stores (kein Re-Render nötig wenn sich
- * das ändert). true während eines Drags (siehe Canvas.tsx onDragStart/onDragEnd) —
- * verhindert, dass jede einzelne Zelle einer Bresenham-Drag-Linie ihren
- * eigenen Undo-Schritt pusht statt einen gemeinsamen für den ganzen Drag.
+ * das ändert). true während eines Bresenham-Drags beim Platzieren/Löschen
+ * (siehe Canvas.tsx onDragStart/onDragEnd) — verhindert, dass jede einzelne
+ * Zelle einer Drag-Linie ihren eigenen Undo-Schritt pusht statt einen
+ * gemeinsamen für den ganzen Drag. Der Selektions-Drag (weiter unten) nutzt
+ * dieses Flag NICHT — er verwaltet sein eigenes Bündeln über dragSnapshot,
+ * weil er zusätzlich revertierbar sein muss (Escape/Pinch-Abbruch).
  */
 let batchActive = false;
 
@@ -35,14 +38,10 @@ let batchActive = false;
  * Erst ALLE Quellen löschen, DANN ALLE Ziele setzen — verhindert Kollisionen
  * bei überlappenden alten/neuen Positionen (z. B. Verschieben um 1 Zelle).
  *
- * Kollisions-Policy NUR für Verschieben (moveCells): Ziel-Zellen außerhalb
- * der Selektion werden überschrieben. Bewusst weiterhin so, weil Verschieben
- * als einzige dieser Operationen eine Live-Vorschau während des Drags hat
- * (siehe renderSelectionOverlay in renderer.ts, rote Kollisionswarnung) —
- * der Nutzer sieht den Konflikt VOR dem Loslassen und kann ausweichen.
- * rotateCells/mirrorCells/pasteCells haben KEINE Vorschau und committen
- * sofort beim Klick — dort wird eine Kollision stattdessen blockiert (siehe
- * dort), nicht stillschweigend überschrieben.
+ * Reiner Datentransport, KEINE Kollisionsprüfung — die liegt bei den
+ * Aufrufern (dragSelectionTo/rotateCells/mirrorCells/pasteCells), die alle
+ * derselben Regel folgen: niemals fremde (nicht zur eigenen Operation
+ * gehörende) Zellen stillschweigend überschreiben. Siehe Doku dort.
  */
 function remapCells(grid: Grid, oldKeys: Set<string>, newKeys: Set<string>): Grid {
   const g = new Map(grid);
@@ -57,6 +56,28 @@ function remapCells(grid: Grid, oldKeys: Set<string>, newKeys: Set<string>): Gri
   for (const [k, cell] of pairs) g.set(k, cell);
   return g;
 }
+
+/**
+ * Prüft, ob irgendeine der `targetKeys` bereits im Grid belegt ist, OHNE
+ * selbst Teil von `ownKeys` (der eigenen, sich gerade bewegenden Auswahl)
+ * zu sein — würde die Operation also fremden Inhalt überschreiben?
+ * Zentrale Kollisionsregel für Verschieben/Rotieren/Spiegeln/Einfügen.
+ */
+function collidesWithForeign(grid: Grid, targetKeys: Iterable<string>, ownKeys: Set<string>): boolean {
+  for (const k of targetKeys) {
+    if (grid.has(k) && !ownKeys.has(k)) return true;
+  }
+  return false;
+}
+
+/**
+ * Zustand eines laufenden Selektions-Drags (Maus-Ziehen ODER Pfeiltasten-
+ * Nudge — beide nutzen dieselben vier Aktionen unten). Modul-intern wie
+ * `batchActive`, kein Re-Render nötig. `moved` hält fest, ob der Drag
+ * TATSÄCHLICH irgendwo hin bewegt hat — ein reiner Tap/Klick ohne Bewegung
+ * soll keinen leeren Undo-Schritt hinterlassen.
+ */
+let dragSnapshot: { grid: Grid; keys: Set<string>; moved: boolean } | null = null;
 
 interface GridStore {
   grid:      Grid;
@@ -83,30 +104,49 @@ interface GridStore {
   clear:         () => void;
   loadGrid:      (g: Grid) => void;
 
-  /** Verschiebt alle Zellen mit den gegebenen Keys um (dx, dy). Überschreibt Ziel-Zellen. */
-  moveCells:   (keys: Set<string>, dx: number, dy: number) => void;
   /** Löscht alle Zellen mit den gegebenen Keys. */
   deleteCells: (keys: Set<string>) => void;
   /**
    * Fügt Zwischenablage-Zellen ein, verankert bei (atX, atY).
-   * BUGFIX: überschreibt KEINE bestehenden Zellen mehr — gibt bei Kollision
-   * `null` zurück (No-Op, kein Undo-Schritt) statt fremde Zellen
-   * stillschweigend zu zerstören. Siehe remapCells-Doku für die Begründung
-   * des Policy-Unterschieds zu moveCells.
+   * `null` bei Kollision mit bestehenden Zellen — No-Op, kein Undo-Schritt.
    */
   pasteCells:  (cells: ClipboardCell[], atX: number, atY: number) => Set<string> | null;
-  /**
-   * Rotiert die Zellen mit den gegebenen Keys um ihr gemeinsames Zentrum.
-   * BUGFIX: `null` bei Kollision mit fremden (nicht selbst selektierten)
-   * Zellen — No-Op statt stillschweigend zu überschreiben.
-   */
+  /** Rotiert die Zellen mit den gegebenen Keys um ihr gemeinsames Zentrum. `null` bei Kollision. */
   rotateCells: (keys: Set<string>, dir: 1 | -1) => Set<string> | null;
-  /**
-   * Spiegelt die Zellen mit den gegebenen Keys.
-   * BUGFIX: `null` bei Kollision mit fremden Zellen — No-Op statt
-   * stillschweigend zu überschreiben.
-   */
+  /** Spiegelt die Zellen mit den gegebenen Keys. `null` bei Kollision. */
   mirrorCells: (keys: Set<string>, axis: 'x' | 'y') => Set<string> | null;
+
+  /**
+   * Startet eine LIVE-Selektionsverschiebung (Maus-Drag oder Pfeiltasten-
+   * Nudge) — merkt sich Grid- und Selektions-Ausgangszustand. Schreibt noch
+   * nichts. Aufrufer: canvas/input.ts (Drag-Start) bzw.
+   * useKeyboardShortcuts.ts (erster Pfeiltasten-Druck einer Nudge-Serie).
+   */
+  beginSelectionDrag: (keys: Set<string>) => void;
+  /**
+   * Bewegt die bei beginSelectionDrag() gemerkten Keys zu (dx, dy) RELATIV
+   * ZUM AUSGANGSZUSTAND (nicht kumulativ vom letzten Schritt aus — das
+   * vermeidet Drift über viele kleine Schritte). Schreibt SOFORT ins Grid
+   * UND spiegelt die neue Position direkt in useSelectionStore — beide
+   * bleiben dadurch immer synchron, kein separater "pending"-Zustand.
+   * Kollision mit fremden Zellen wird verweigert: Grid/Selektion bleiben an
+   * der letzten gültigen Position stehen (Rückgabe false) — die Selektion
+   * "läuft gegen eine Wand", statt fremden Inhalt zu zerstören.
+   */
+  dragSelectionTo: (dx: number, dy: number) => boolean;
+  /**
+   * Schließt den Drag ab: EIN Undo-Schritt für die gesamte Geste (beliebig
+   * viele dragSelectionTo-Aufrufe), aber nur wenn tatsächlich etwas bewegt
+   * wurde — ein reiner Tap ohne Bewegung hinterlässt keinen Undo-Schritt.
+   */
+  endSelectionDrag: () => void;
+  /**
+   * Bricht den Drag ab: stellt exakt den Grid-/Selektionszustand von VOR
+   * dem Drag wieder her (Escape, oder ein zweiter Finger übernimmt Pinch).
+   * Rührt Undo-/Redo-Stack nicht an — der Drag ist, als hätte er nie
+   * stattgefunden.
+   */
+  cancelSelectionDrag: () => void;
 
   /** Speichert den aktuellen Grid-Zustand auf dem Undo-Stack (max. 60). */
   pushUndo:   () => void;
@@ -180,22 +220,14 @@ export const useGridStore = create<GridStore>((set, get) => ({
 
   clear: () => {
     get().pushUndo();
-    // Wie bei undo/redo: eine evtl. schwebende Verschiebung bezieht sich auf
-    // einen Grid-Zustand, der hier komplett gelöscht wird — verwerfen, nicht
-    // finalisieren. Ohne dies blieb "selected" nach Reset auf Zellen zeigen,
-    // die im neuen (leeren) Grid gar nicht mehr existieren — die
-    // SelectionActions-Leiste war weiter sichtbar und operierte auf Phantomen.
+    // Die Selektion bezieht sich auf einen Grid-Zustand, der hier komplett
+    // gelöscht wird — aufheben, sonst zeigt "selected" auf Zellen, die im
+    // neuen (leeren) Grid gar nicht mehr existieren.
     useSelectionStore.getState().clearSelection();
     set({ grid: new Map(), stepCount: 0, isRunning: false, loopError: null });
   },
 
   loadGrid: g => set({ grid: g, stepCount: 0, isRunning: false, loopError: null }),
-
-  moveCells: (keys, dx, dy) => {
-    const newKeys = translateKeys(keys, dx, dy);
-    if (!batchActive) get().pushUndo();
-    set(s => ({ grid: remapCells(s.grid, keys, newKeys) }));
-  },
 
   deleteCells: keys => {
     if (!batchActive) get().pushUndo();
@@ -211,24 +243,20 @@ export const useGridStore = create<GridStore>((set, get) => ({
     // Grund keine gültigen Zellen kopiert bekam) → No-Op statt einen
     // Undo-Schritt für nichts zu verbrauchen.
     if (cells.length === 0) return new Set();
-    // BUGFIX: keine bestehenden Zellen mehr überschreiben. Der Einfüge-Anker
-    // (Viewport-Mitte für den Button, Zeigerposition für Strg+V) kann JEDE
-    // bestehende Zelle treffen — auch die gerade erst kopierte Original-
-    // Selektion selbst, falls sie sich noch dort befindet. Ohne diesen Check
-    // konnte Einfügen fremden (oder den eigenen, noch nicht deselektierten)
-    // Inhalt stillschweigend zerstören.
     const g0 = get().grid;
-    for (const c of cells) {
-      if (g0.has(key(atX + c.dx, atY + c.dy))) return null;
-    }
+    const targetKeys = cells.map(c => key(atX + c.dx, atY + c.dy));
+    // Einfügen erzeugt IMMER neue Zellen — "eigene" Keys gibt es hier nicht
+    // (anders als bei Rotieren/Spiegeln/Verschieben, die eine bestehende
+    // Auswahl umformen). Jede Kollision blockiert daher vollständig.
+    if (collidesWithForeign(g0, targetKeys, new Set())) return null;
     if (!batchActive) get().pushUndo();
     const newKeys = new Set<string>();
     set(s => {
       const g = new Map(s.grid);
-      for (const c of cells) {
-        const k = key(atX + c.dx, atY + c.dy);
-        g.set(k, { type: c.type, state: c.state, forced: c.forced });
-        newKeys.add(k);
+      for (let i = 0; i < cells.length; i++) {
+        const c = cells[i];
+        g.set(targetKeys[i], { type: c.type, state: c.state, forced: c.forced });
+        newKeys.add(targetKeys[i]);
       }
       return { grid: g };
     });
@@ -237,15 +265,7 @@ export const useGridStore = create<GridStore>((set, get) => ({
 
   rotateCells: (keys, dir) => {
     const newKeys = rotateKeys(keys, dir);
-    // BUGFIX: keine fremden Zellen mehr überschreiben. Rotieren hat — anders
-    // als Verschieben — keine Live-Vorschau, in der eine Kollision vor dem
-    // Commit sichtbar wäre; ohne diesen Check verschwanden benachbarte,
-    // nicht selektierte Zellen sofort und ohne jede Vorwarnung, sobald die
-    // gedrehte Form (Breite/Höhe tauschen die Rollen!) in ihren Bereich
-    // hineinragte.
-    for (const k of newKeys) {
-      if (get().grid.has(k) && !keys.has(k)) return null;
-    }
+    if (collidesWithForeign(get().grid, newKeys, keys)) return null;
     if (!batchActive) get().pushUndo();
     set(s => ({ grid: remapCells(s.grid, keys, newKeys) }));
     return newKeys;
@@ -253,14 +273,45 @@ export const useGridStore = create<GridStore>((set, get) => ({
 
   mirrorCells: (keys, axis) => {
     const newKeys = mirrorKeys(keys, axis);
-    // BUGFIX: gleicher Grund wie bei rotateCells — keine Live-Vorschau,
-    // also keine stillschweigende Kollision erlauben.
-    for (const k of newKeys) {
-      if (get().grid.has(k) && !keys.has(k)) return null;
-    }
+    if (collidesWithForeign(get().grid, newKeys, keys)) return null;
     if (!batchActive) get().pushUndo();
     set(s => ({ grid: remapCells(s.grid, keys, newKeys) }));
     return newKeys;
+  },
+
+  beginSelectionDrag: keys => {
+    dragSnapshot = { grid: get().grid, keys, moved: false };
+  },
+
+  dragSelectionTo: (dx, dy) => {
+    if (!dragSnapshot) return false;
+    const { grid: base, keys } = dragSnapshot;
+    const newKeys = translateKeys(keys, dx, dy);
+    if (collidesWithForeign(base, newKeys, keys)) return false;
+    set({ grid: remapCells(base, keys, newKeys) });
+    useSelectionStore.getState().setSelection(newKeys);
+    if (dx !== 0 || dy !== 0) dragSnapshot.moved = true;
+    return true;
+  },
+
+  endSelectionDrag: () => {
+    if (!dragSnapshot) return;
+    const { grid: base, moved } = dragSnapshot;
+    if (moved) {
+      set(s => {
+        const stack = [...s.undoStack, base];
+        if (stack.length > MAX_UNDO) stack.shift();
+        return { undoStack: stack, redoStack: [] };
+      });
+    }
+    dragSnapshot = null;
+  },
+
+  cancelSelectionDrag: () => {
+    if (!dragSnapshot) return;
+    set({ grid: dragSnapshot.grid });
+    useSelectionStore.getState().setSelection(dragSnapshot.keys);
+    dragSnapshot = null;
   },
 
   pushUndo: () => set(s => {
