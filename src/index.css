@@ -3,8 +3,16 @@
 ═══════════════════════════════════════════════════════════════ */
 
 /* ── Reset ──────────────────────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body { overflow: hidden; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+body {
+  overflow: hidden;
+}
 /*
   100vh zählt auf Mobile (Safari/Chrome) die (ggf. eingeblendete) Adressleiste
   mit — die tatsächlich sichtbare Höhe ist kleiner. Das drückte den untersten
@@ -13,24 +21,27 @@ body { overflow: hidden; }
   100dvh berücksichtigt die tatsächlich sichtbare Höhe. Fallback bleibt 100vh
   für Browser ohne dvh-Unterstützung (Cascade: unbekannte Werte werden ignoriert).
 */
-#root { height: 100vh; height: 100dvh; }
+#root {
+  height: 100vh;
+  height: 100dvh;
+}
 
 /* ── Design Tokens ──────────────────────────────────────────── */
 :root {
-  --bg-app:      #0b0b1e;
-  --bg-ui:       #0f0f2a;
-  --border-ui:   #1c1c48;
-  --accent:      #4455ee;
-  --cell-cable:  #00ff88;
-  --cell-inv:    #ff9900;
-  --cell-delay:  #bb44ff;
+  --bg-app: #0b0b1e;
+  --bg-ui: #0f0f2a;
+  --border-ui: #1c1c48;
+  --accent: #4455ee;
+  --cell-cable: #00ff88;
+  --cell-inv: #ff9900;
+  --cell-delay: #bb44ff;
   --cell-delete: #ff4455;
-  --sim-blue:    #4488cc;
-  --sim-green:   #00aa55;
-  --sim-red:     #cc3333;
-  --text-dim:    #334466;
-  --text-muted:  #445566;
-  --font:        'Courier New', monospace;
+  --sim-blue: #4488cc;
+  --sim-green: #00aa55;
+  --sim-red: #cc3333;
+  --text-dim: #334466;
+  --text-muted: #445566;
+  --font: "Courier New", monospace;
   --touch-target: 44px;
 }
 
@@ -65,12 +76,18 @@ body { overflow: hidden; }
     Braucht viewport-fit=cover in index.html, sonst liefert env() immer 0.
   */
   padding: env(safe-area-inset-top) env(safe-area-inset-right)
-           env(safe-area-inset-bottom) env(safe-area-inset-left);
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
-.top-bar     { grid-area: toolbar; }
-.canvas-area { grid-area: canvas;  }
-.status-bar  { grid-area: status;  }
+.top-bar {
+  grid-area: toolbar;
+}
+.canvas-area {
+  grid-area: canvas;
+}
+.status-bar {
+  grid-area: status;
+}
 
 /* ── Scrollbare Button-Reihen (Toolbar/SimBar) ──────────────────
    Sicherheitsnetz gegen horizontales Abschneiden: falls eine Button-Reihe
@@ -80,9 +97,11 @@ body { overflow: hidden; }
 .scroll-row {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;   /* Firefox */
+  scrollbar-width: none; /* Firefox */
 }
-.scroll-row::-webkit-scrollbar { display: none; } /* Chrome/Safari */
+.scroll-row::-webkit-scrollbar {
+  display: none;
+} /* Chrome/Safari */
 
 /* ── top-bar ────────────────────────────────────────────────── */
 .top-bar {
@@ -172,13 +191,23 @@ body { overflow: hidden; }
   white-space: nowrap;
   cursor: pointer;
 }
-.sel-action-btn:hover { background: rgba(68,136,204,0.15); }
-.sel-action-danger { color: var(--cell-delete); }
-.sel-action-danger:hover { background: rgba(255,68,85,0.15); }
+.sel-action-btn:hover {
+  background: rgba(68, 136, 204, 0.15);
+}
+.sel-action-danger {
+  color: var(--cell-delete);
+}
+.sel-action-danger:hover {
+  background: rgba(255, 68, 85, 0.15);
+}
 /* Bestätigen-Button für eine schwebende Selektion — gleiche Farbe wie der
    Play-Button in SimBar.tsx (Grün = "diese Aktion abschließen/bestätigen"). */
-.sel-action-confirm { color: var(--sim-green); }
-.sel-action-confirm:hover { background: rgba(0,170,85,0.15); }
+.sel-action-confirm {
+  color: var(--sim-green);
+}
+.sel-action-confirm:hover {
+  background: rgba(0, 170, 85, 0.15);
+}
 
 /* Trenner zwischen den Aktionsgruppen (Zwischenablage / Transformieren /
    Exportieren / Löschen) — gleiche Optik wie die Trenner in SimBar.tsx. */
@@ -196,7 +225,17 @@ body { overflow: hidden; }
    die Labels — anders als bei Toolbar/SimBar (1260px-Grenze) hat diese
    Leiste den ganzen Canvas als Platz, nicht die schmale Top-Bar. */
 @media (max-width: 380px) {
-  .sel-action-btn .btn-label { display: none; }
+  .sel-action-btn .btn-label {
+    display: none;
+  }
+}
+
+.logo {
+  height: var(--touch-target);
+}
+
+.logo > img {
+  margin: 5px;
 }
 
 /* ── Toolbar-Buttons ────────────────────────────────────────── */
@@ -215,7 +254,9 @@ body { overflow: hidden; }
   border: 1px solid transparent;
   outline: none;
   white-space: nowrap;
-  transition: background 0.1s, color 0.1s;
+  transition:
+    background 0.1s,
+    color 0.1s;
   background: transparent;
 }
 
@@ -235,11 +276,21 @@ body { overflow: hidden; }
   white-space: nowrap;
   border: 1px solid transparent;
 }
-.sim-btn:disabled { cursor: default; opacity: 0.38; }
+.sim-btn:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
 
 /* ── Keyboard-Shortcut-Labels ───────────────────────────────── */
-.shortcut { opacity: 0.38; font-size: 10px; }
-@media (hover: none) { .shortcut { display: none; } }
+.shortcut {
+  opacity: 0.38;
+  font-size: 10px;
+}
+@media (hover: none) {
+  .shortcut {
+    display: none;
+  }
+}
 
 /* ── Statusleiste ───────────────────────────────────────────── */
 .status-row {
@@ -252,7 +303,9 @@ body { overflow: hidden; }
   color: var(--text-dim);
   min-height: 24px;
 }
-.hint-text { flex: 1; }
+.hint-text {
+  flex: 1;
+}
 
 /* ── Loop-Error-Banner ──────────────────────────────────────── */
 .loop-error {
@@ -273,11 +326,21 @@ body { overflow: hidden; }
 /* (Reset bleibt als Icon sichtbar, nur reset-btn selbst NICHT      */
 /* ausblenden — die .btn-label-Regel unten erledigt den Rest.)      */
 @media (max-width: 1260px) {
-  .hz-control { display: none !important; }
-  .hint-text  { display: none; }
-  .logo-text  { display: none; }
-  .sim-btn .btn-label { display: none; }
-  .tool-btn .btn-label { display: none; }
+  .hz-control {
+    display: none !important;
+  }
+  .hint-text {
+    display: none;
+  }
+  .logo-text {
+    display: none;
+  }
+  .sim-btn .btn-label {
+    display: none;
+  }
+  .tool-btn .btn-label {
+    display: none;
+  }
 }
 
 /* ── Mobile-Layout (< 600px) ────────────────────────────────── */
@@ -299,7 +362,9 @@ body { overflow: hidden; }
   }
 
   /* Schritt-Overlay einblenden */
-  .step-overlay { display: block; }
+  .step-overlay {
+    display: block;
+  }
 
   /* hz-control, reset-btn, hint-text, logo-text und alle .btn-label sind
      bereits durch den ≤1260px-Kompaktmodus oben abgedeckt (599px ist eine
