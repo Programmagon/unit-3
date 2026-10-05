@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   Unit-3  —  Design Tokens & Layout
+   Unit-3  —  Layout & Komponenten
 ═══════════════════════════════════════════════════════════════ */
 
 /* ── Reset ──────────────────────────────────────────────────── */
@@ -26,24 +26,7 @@ body {
   height: 100dvh;
 }
 
-/* ── Design Tokens ──────────────────────────────────────────── */
-:root {
-  --bg-app: #0b0b1e;
-  --bg-ui: #0f0f2a;
-  --border-ui: #1c1c48;
-  --accent: #4455ee;
-  --cell-cable: #00ff88;
-  --cell-inv: #ff9900;
-  --cell-delay: #bb44ff;
-  --cell-delete: #ff4455;
-  --sim-blue: #4488cc;
-  --sim-green: #00aa55;
-  --sim-red: #cc3333;
-  --text-dim: #334466;
-  --text-muted: #445566;
-  --font: "Courier New", monospace;
-  --touch-target: 44px;
-}
+/* Farben, Schrift- und Größen-Tokens: siehe theme.css */
 
 /* ── App-Layout (CSS Grid) ──────────────────────────────────── */
 /*
@@ -67,6 +50,8 @@ body {
   height: 100dvh; /* s. Kommentar bei #root */
   background: var(--bg-app);
   font-family: var(--font);
+  font-weight: var(--fw-text);
+  color: var(--text);
   user-select: none;
   overflow: hidden;
   /*
@@ -140,12 +125,13 @@ body {
   position: absolute;
   top: 8px;
   left: 10px;
-  background: rgba(15, 15, 42, 0.75);
+  background: color-mix(in srgb, var(--bg-ui) 80%, transparent);
   border: 1px solid var(--border-ui);
-  border-radius: 4px;
+  border-radius: var(--radius-ui);
   padding: 2px 8px;
-  font-size: 10px;
-  color: var(--sim-blue);
+  font-size: var(--fs-xs);
+  color: var(--text);
+  font-weight: var(--fw-medium);
   pointer-events: none;
   z-index: 10;
 }
@@ -169,46 +155,12 @@ body {
   max-width: calc(100% - 24px);
   gap: 4px;
   padding: 4px;
-  background: rgba(15, 15, 42, 0.9);
-  border: 1px solid var(--border-ui);
-  border-radius: 6px;
+  background: var(--bg-ui);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-float);
   z-index: 10;
 }
-.sel-action-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  height: var(--touch-target);
-  min-width: var(--touch-target);
-  padding: 0 10px;
-  border-radius: 4px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--sim-blue);
-  font-size: 15px;
-  font-family: var(--font);
-  white-space: nowrap;
-  cursor: pointer;
-}
-.sel-action-btn:hover {
-  background: rgba(68, 136, 204, 0.15);
-}
-.sel-action-danger {
-  color: var(--cell-delete);
-}
-.sel-action-danger:hover {
-  background: rgba(255, 68, 85, 0.15);
-}
-/* Bestätigen-Button für eine schwebende Selektion — gleiche Farbe wie der
-   Play-Button in SimBar.tsx (Grün = "diese Aktion abschließen/bestätigen"). */
-.sel-action-confirm {
-  color: var(--sim-green);
-}
-.sel-action-confirm:hover {
-  background: rgba(0, 170, 85, 0.15);
-}
-
 /* Trenner zwischen den Aktionsgruppen (Zwischenablage / Transformieren /
    Exportieren / Löschen) — gleiche Optik wie die Trenner in SimBar.tsx. */
 .sel-action-divider {
@@ -225,66 +177,162 @@ body {
    die Labels — anders als bei Toolbar/SimBar (1260px-Grenze) hat diese
    Leiste den ganzen Canvas als Platz, nicht die schmale Top-Bar. */
 @media (max-width: 380px) {
-  .sel-action-btn .btn-label {
+  .selection-actions .btn .btn-label {
     display: none;
   }
 }
 
+/* ── Logo ───────────────────────────────────────────────────────
+   Reihenfolge einhalten: Varianten stehen NACH .logo.
+   34 px + 2 × 5 px Rand = 44 px = --touch-target. */
 .logo {
-  height: var(--touch-target);
+  display: block;
+  height: 34px;
+  width: auto;
+  margin: 5px 8px 5px 0;
+  flex-shrink: 0;
+}
+.logo--for-light {
+  display: none;
+}
+:root[data-theme="light"] .logo--for-light {
+  display: block;
+}
+:root[data-theme="light"] .logo--for-dark {
+  display: none;
 }
 
-.logo > img {
-  margin: 5px;
-}
-
-/* ── Toolbar-Buttons ────────────────────────────────────────── */
-.tool-btn {
+/* ── Button-System ──────────────────────────────────────────────
+   Zwei Variablen pro Button: --tone (Fläche) und --ink (Schrift/Icon),
+   gesetzt über Modifier-Klassen — keine Inline-Farben. */
+.btn {
+  --tone: var(--tone-action);
+  --ink: var(--ink-action);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 6px;
   height: var(--touch-target);
   min-width: var(--touch-target);
   padding: 0 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-family: var(--font);
-  font-size: 12px;
-  border: 1px solid transparent;
-  outline: none;
-  white-space: nowrap;
-  transition:
-    background 0.1s,
-    color 0.1s;
+  border: 1px solid color-mix(in srgb, var(--ink) 40%, transparent);
+  border-radius: var(--radius-ui);
   background: transparent;
+  color: var(--ink);
+  font: var(--fw-text) var(--fs-sm) var(--font);
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.btn--confirm {
+  --tone: var(--tone-confirm);
+  --ink: var(--ink-confirm);
+}
+.btn--danger {
+  --tone: var(--tone-danger);
+  --ink: var(--ink-danger);
+}
+.btn--cable {
+  --tone: var(--tone-cable);
+  --ink: var(--ink-cable);
+}
+.btn--inv {
+  --tone: var(--tone-inv);
+  --ink: var(--ink-inv);
+}
+.btn--delay {
+  --tone: var(--tone-delay);
+  --ink: var(--ink-delay);
 }
 
-/* ── Sim-Buttons ────────────────────────────────────────────── */
-.sim-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  height: var(--touch-target);
-  padding: 0 14px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-family: var(--font);
-  font-size: 12px;
-  outline: none;
-  white-space: nowrap;
-  border: 1px solid transparent;
+.btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--tone) 10%, transparent);
 }
-.sim-btn:disabled {
+.btn:disabled {
+  opacity: 0.45;
   cursor: default;
-  opacity: 0.38;
+}
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* aktiv / gedrückt: Fläche in Tonfarbe, dunkle Schrift */
+.btn[aria-pressed="true"] {
+  background: var(--tone);
+  color: var(--on-solid);
+  border-color: var(--tone);
+  font-weight: var(--fw-strong);
+  box-shadow: inset 0 0 0 1px var(--edge-solid);
+}
+/* Play (grün) / Pause (rot) */
+.btn--solid {
+  background: var(--solid-confirm);
+  color: var(--on-solid);
+  border-color: transparent;
+  font-weight: var(--fw-strong);
+  box-shadow: inset 0 0 0 1px var(--edge-solid);
+}
+.btn--solid.is-stop {
+  background: var(--solid-danger);
+}
+.btn--ghost {
+  border-color: transparent; /* in Panels */
+}
+
+/* Icon-Größe/Strich aus den Tokens */
+.btn svg {
+  width: var(--icon-size);
+  height: var(--icon-size);
+  stroke-width: var(--icon-stroke);
+  stroke-linecap: var(--icon-cap);
+  flex-shrink: 0;
+}
+
+/* NUR Light: Zelltyp-Buttons zeigen die Zellfarbe als kleiner Chip um das
+   Icon (Schrift bleibt neutral). Aktiv gefüllte Buttons brauchen ihn nicht. */
+:root[data-theme="light"] .btn--tool:not([aria-pressed="true"]) svg {
+  box-sizing: content-box;
+  padding: 3px;
+  border-radius: 4px;
+  background: var(--tone);
+  color: var(--on-solid);
+  box-shadow: inset 0 0 0 1px var(--edge-solid);
+}
+
+/* Trenner in der SimBar */
+.bar-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 8px 2px;
+  background: var(--border-ui);
+  flex-shrink: 0;
+}
+
+/* ── Hz-Regler (SimBar) ─────────────────────────────────────── */
+.hz-control {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.hz-control input[type="range"] {
+  width: 65px;
+  accent-color: var(--accent);
+}
+.hz-control .hz-value {
+  color: var(--text);
+  font-weight: var(--fw-medium);
+  min-width: 32px;
 }
 
 /* ── Keyboard-Shortcut-Labels ───────────────────────────────── */
 .shortcut {
-  opacity: 0.38;
-  font-size: 10px;
+  opacity: 0.7;
+  font-size: var(--fs-xs);
 }
 @media (hover: none) {
   .shortcut {
@@ -299,12 +347,19 @@ body {
   padding: 3px 10px;
   background: var(--bg-ui);
   border-top: 1px solid var(--border-ui);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-dim);
   min-height: 24px;
 }
 .hint-text {
   flex: 1;
+}
+.status-item + .status-item {
+  margin-left: 12px;
+}
+.status-num {
+  color: var(--text);
+  font-weight: var(--fw-medium);
 }
 
 /* ── Loop-Error-Banner ──────────────────────────────────────── */
@@ -313,10 +368,10 @@ body {
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  background: #2a0000;
-  border-top: 1px solid #880000;
-  font-size: 11px;
-  color: #ff6666;
+  background: color-mix(in srgb, var(--ink-danger) 14%, var(--bg-ui));
+  border-top: 1px solid var(--ink-danger);
+  font-size: var(--fs-xs);
+  color: var(--ink-danger);
 }
 
 /* ── Tablet-Kompaktmodus (≤ 1260px) ──────────────────────────── */
@@ -332,13 +387,7 @@ body {
   .hint-text {
     display: none;
   }
-  .logo-text {
-    display: none;
-  }
-  .sim-btn .btn-label {
-    display: none;
-  }
-  .tool-btn .btn-label {
+  .top-bar .btn-label {
     display: none;
   }
 }
@@ -361,12 +410,17 @@ body {
     border-bottom: none;
   }
 
+  /* Logo weicht den Buttons (Bottom-Bar) */
+  .logo {
+    display: none !important;
+  }
+
   /* Schritt-Overlay einblenden */
   .step-overlay {
     display: block;
   }
 
-  /* hz-control, reset-btn, hint-text, logo-text und alle .btn-label sind
+  /* hz-control, hint-text und alle .btn-label in der Top-Bar sind
      bereits durch den ≤1260px-Kompaktmodus oben abgedeckt (599px ist eine
      Teilmenge davon) — hier nur noch, was spezifisch für echtes Mobile ist. */
 }

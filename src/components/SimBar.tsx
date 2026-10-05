@@ -1,5 +1,9 @@
 import { useGridStore } from '../store/gridStore';
 import { useSelectionStore } from '../store/selectionStore';
+import {
+  IconUndo, IconRedo, IconStep, IconPlay, IconPause,
+  IconTrash, IconSave, IconOpen, IconImport,
+} from './icons';
 
 interface SimBarProps {
   /** Speichert Grid + Kamera als .u3-Datei. Wird von App.tsx implementiert. */
@@ -45,46 +49,30 @@ export function SimBar({ onSave, onLoad, onImportSelection }: SimBarProps) {
     }}>
       {/* Undo / Redo */}
       <button
-        className="sim-btn undo-btn"
+        className="btn undo-btn"
         onClick={undo}
         disabled={!canUndo}
         title="Rückgängig [Strg+Z]"
-        style={{
-          background:  'transparent',
-          color:       canUndo ? 'var(--sim-blue)' : 'var(--border-ui)',
-          borderColor: canUndo ? 'var(--sim-blue)' : 'var(--border-ui)',
-          flexShrink:  0,
-        }}
+        aria-label="Rückgängig"
       >
-        ↩<span className="btn-label"> Undo</span>
+        <IconUndo /><span className="btn-label">Undo</span>
       </button>
       <button
-        className="sim-btn redo-btn"
+        className="btn redo-btn"
         onClick={redo}
         disabled={!canRedo}
         title="Wiederherstellen [Strg+Y]"
-        style={{
-          background:  'transparent',
-          color:       canRedo ? 'var(--sim-blue)' : 'var(--border-ui)',
-          borderColor: canRedo ? 'var(--sim-blue)' : 'var(--border-ui)',
-          flexShrink:  0,
-        }}
+        aria-label="Wiederherstellen"
       >
-        ↪<span className="btn-label"> Redo</span>
+        <IconRedo /><span className="btn-label">Redo</span>
       </button>
 
       {/* Trenner */}
-      <div style={{
-        width:      1,
-        alignSelf:  'stretch',
-        margin:     '8px 2px',
-        background: 'var(--border-ui)',
-        flexShrink: 0,
-      }} />
+      <div className="bar-divider" />
 
       {/* Schritt */}
       <button
-        className="sim-btn"
+        className="btn"
         onClick={() => {
           if (running) return;
           // Simulation muss den ECHTEN Grid-Zustand sehen — eine schwebende
@@ -96,119 +84,77 @@ export function SimBar({ onSave, onLoad, onImportSelection }: SimBarProps) {
           step();
         }}
         disabled={running}
-        style={{
-          background:  'transparent',
-          color:       running ? 'var(--border-ui)' : 'var(--sim-blue)',
-          borderColor: running ? 'var(--border-ui)' : 'var(--sim-blue)',
-          flexShrink:  0,
-        }}
+        title="Schritt [.]"
+        aria-label="Schritt"
       >
-        ⏭<span className="shortcut"> [.]</span>
-        <span className="btn-label"> Schritt</span>
+        <IconStep /><span className="shortcut">[.]</span>
+        <span className="btn-label">Schritt</span>
       </button>
 
       {/* Play / Pause */}
       <button
-        className="sim-btn"
+        className={`btn btn--solid${running ? ' is-stop' : ''}`}
         onClick={() => {
           if (!running && useSelectionStore.getState().selection.status === 'floating') {
             useSelectionStore.getState().commitFloating();
           }
           setRunning(!running);
         }}
-        style={{
-          background:  running ? 'var(--sim-red)' : 'var(--sim-green)',
-          color:       '#000',
-          fontWeight:  'bold',
-          border:      'none',
-          flexShrink:  0,
-        }}
+        title={`${running ? 'Pause' : 'Play'} [Space]`}
+        aria-label={running ? 'Pause' : 'Play'}
       >
-        {running ? '⏸ Pause' : '▶ Play'}
-        <span className="shortcut"> [Space]</span>
+        {running ? <IconPause fill="currentColor" /> : <IconPlay fill="currentColor" />}
+        {running ? 'Pause' : 'Play'}
+        <span className="shortcut">[Space]</span>
       </button>
 
       {/* Hz-Slider — wird auf Mobile via CSS ausgeblendet */}
-      <label className="hz-control" style={{
-        display:     'flex',
-        alignItems:  'center',
-        gap:         5,
-        fontSize:    11,
-        color:       'var(--text-muted)',
-        whiteSpace:  'nowrap',
-        flexShrink:  0,
-      }}>
+      <label className="hz-control">
         <input
           type="range"
           min={1} max={30} value={hz}
           onChange={e => setHz(+e.target.value)}
-          style={{ width: 65, accentColor: 'var(--accent)' }}
         />
-        <span style={{ color: 'var(--sim-blue)', minWidth: 32 }}>{hz} Hz</span>
+        <span className="hz-value">{hz} Hz</span>
       </label>
 
-      {/* Reset — wird auf Mobile via CSS ausgeblendet */}
+      {/* Reset */}
       <button
-        className="sim-btn reset-btn"
+        className="btn btn--danger reset-btn"
         onClick={clear}
-        style={{
-          background:  'transparent',
-          color:       'var(--cell-delete)',
-          borderColor: '#662222',
-          flexShrink:  0,
-        }}
+        title="Zurücksetzen"
+        aria-label="Zurücksetzen"
       >
-        🗑<span className="btn-label"> Reset</span>
+        <IconTrash /><span className="btn-label">Reset</span>
       </button>
 
       {/* Trenner */}
-      <div style={{
-        width:      1,
-        alignSelf:  'stretch',
-        margin:     '8px 2px',
-        background: 'var(--border-ui)',
-        flexShrink: 0,
-      }} />
+      <div className="bar-divider" />
 
       {/* Speichern / Öffnen */}
       <button
-        className="sim-btn save-btn"
+        className="btn save-btn"
         onClick={onSave}
         title="Speichern (.u3)"
-        style={{
-          background:  'transparent',
-          color:       'var(--sim-blue)',
-          borderColor: 'var(--sim-blue)',
-          flexShrink:  0,
-        }}
+        aria-label="Speichern"
       >
-        💾<span className="btn-label"> Speichern</span>
+        <IconSave /><span className="btn-label">Speichern</span>
       </button>
       <button
-        className="sim-btn load-btn"
+        className="btn load-btn"
         onClick={onLoad}
         title="Öffnen (.u3/.json)"
-        style={{
-          background:  'transparent',
-          color:       'var(--sim-blue)',
-          borderColor: 'var(--sim-blue)',
-          flexShrink:  0,
-        }}
+        aria-label="Öffnen"
       >
-        📂<span className="btn-label"> Öffnen</span>
+        <IconOpen /><span className="btn-label">Öffnen</span>
       </button>
       <button
-        className="sim-btn"
+        className="btn"
         onClick={onImportSelection}
         title="Selektion importieren (.u3sel)"
-        style={{
-          background:  'transparent',
-          color:       'var(--sim-blue)',
-          borderColor: 'var(--sim-blue)',
-          flexShrink:  0,
-        }}
+        aria-label="Selektion importieren"
       >
-        📥<span className="btn-label"> Import</span>
+        <IconImport /><span className="btn-label">Import</span>
       </button>
     </div>
   );

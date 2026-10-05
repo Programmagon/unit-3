@@ -1,5 +1,6 @@
 import { useGridStore } from '../store/gridStore';
 import { useUIStore }   from '../store/uiStore';
+import { IconWarning }  from './icons';
 
 /**
  * Statusleiste — Loop-Error-Banner + Zähler + Hilfetext.
@@ -19,10 +20,10 @@ export function SimControls() {
 
   const hint = tool === 'select'
     ? 'Ziehen: Auswählen (ersetzt vorherige Auswahl) · Ziehen auf Selektion: ' +
-      'Aufheben & Verschieben · R/⇧R: Drehen · F/⇧F: Spiegeln · Pfeiltasten: ' +
+      'Aufheben & Verschieben · R / Umschalt+R: Drehen · F / Umschalt+F: Spiegeln · Pfeiltasten: ' +
       'zellenweise verschieben · Enter: Bestätigen · Esc: Abbrechen · ' +
       'Strg+C/X/V/D: Kopieren/Ausschneiden/Einfügen/Duplizieren'
-    : 'Klick: Platzieren · Gleicher Typ ⊕: Force · Rechtsklick/Long-Press: Löschen · ' +
+    : 'Klick: Platzieren · Gleicher Typ: Force · Rechtsklick/Long-Press: Löschen · ' +
       'Alt+Drag: Schwenken · Scroll/Pinch: Zoom';
 
   return (
@@ -30,7 +31,7 @@ export function SimControls() {
       {/* Loop-Error — immer sichtbar wenn gesetzt */}
       {loopError && (
         <div className="loop-error">
-          <span style={{ fontSize: 14 }}>⚠</span>
+          <IconWarning aria-hidden />
           <strong>SimLoopError —</strong>
           <span>{loopError}</span>
         </div>
@@ -39,11 +40,11 @@ export function SimControls() {
       {/* Zähler + Hilfetext */}
       <div className="status-row">
         <span className="hint-text">{hint}</span>
-        <span style={{ color: 'var(--text-dim)', marginRight: 12 }}>
-          Schritt: <span style={{ color: 'var(--sim-blue)' }}>{steps}</span>
+        <span className="status-item">
+          Schritt: <span className="status-num">{steps}</span>
         </span>
-        <span style={{ color: 'var(--text-dim)' }}>
-          Zellen: <span style={{ color: 'var(--sim-blue)' }}>{cells}</span>
+        <span className="status-item">
+          Zellen: <span className="status-num">{cells}</span>
         </span>
       </div>
     </div>

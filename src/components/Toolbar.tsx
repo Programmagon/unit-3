@@ -1,49 +1,28 @@
 import { useUIStore } from "../store/uiStore";
 import { useSelectionStore } from "../store/selectionStore";
 import type { Tool } from "../canvas/input";
+import type { ComponentType } from "react";
+import { Logo } from "./Logo";
+import {
+  IconCable,
+  IconInverter,
+  IconDelay,
+  IconErase,
+  IconSelect,
+} from "./icons";
 
 const TOOLS: {
   id: Tool;
-  icon: string;
+  Icon: ComponentType;
   label: string;
   shortcut: string;
-  color: string;
+  cls: string;
 }[] = [
-  {
-    id: "cable",
-    icon: "━",
-    label: "Kabel",
-    shortcut: "1",
-    color: "var(--cell-cable)",
-  },
-  {
-    id: "inverter",
-    icon: "◇",
-    label: "Umkehrer",
-    shortcut: "2",
-    color: "var(--cell-inv)",
-  },
-  {
-    id: "delay",
-    icon: "▷",
-    label: "Verzögerer",
-    shortcut: "3",
-    color: "var(--cell-delay)",
-  },
-  {
-    id: "delete",
-    icon: "✕",
-    label: "Löschen",
-    shortcut: "E",
-    color: "var(--cell-delete)",
-  },
-  {
-    id: "select",
-    icon: "▭",
-    label: "Auswählen",
-    shortcut: "S",
-    color: "var(--sim-blue)",
-  },
+  { id: "cable",    Icon: IconCable,    label: "Kabel",      shortcut: "1", cls: "btn--tool btn--cable" },
+  { id: "inverter", Icon: IconInverter, label: "Umkehrer",   shortcut: "2", cls: "btn--tool btn--inv" },
+  { id: "delay",    Icon: IconDelay,    label: "Verzögerer", shortcut: "3", cls: "btn--tool btn--delay" },
+  { id: "delete",   Icon: IconErase,    label: "Löschen",    shortcut: "E", cls: "btn--danger" },
+  { id: "select",   Icon: IconSelect,   label: "Auswählen",  shortcut: "S", cls: "" },
 ];
 
 /**
@@ -70,28 +49,15 @@ export function Toolbar() {
         minWidth: 0,
       }}
     >
-      <span className="logo">
-        <img
-          src="../../public/logo.png"
-          alt="Unit 3"
-          //style={{ height: "var(--touch-target)" }}
-        ></img>
-      </span>
-
-      {/*<span style={{
-        color:       'var(--accent)',
-        fontWeight:  'bold',
-        fontSize:    14,
-        marginRight: 4,
-        whiteSpace:  'nowrap',
-      }}>
-        ▣<span className="logo-text"> Unit-3</span>
-      </span>*/}
+      <Logo />
 
       {TOOLS.map((t) => (
         <button
           key={t.id}
-          className="tool-btn"
+          className={`btn ${t.cls}`.trim()}
+          aria-pressed={tool === t.id}
+          aria-label={t.label}
+          title={`${t.label} [${t.shortcut}]`}
           onClick={() => {
             // Erneuter Klick auf das bereits aktive Werkzeug → deselektieren
             // (kein Werkzeug aktiv, alles pannt — siehe canvas/input.ts shouldPan).
@@ -111,15 +77,8 @@ export function Toolbar() {
             }
             setTool(nextTool);
           }}
-          style={{
-            background: tool === t.id ? t.color : "transparent",
-            color: tool === t.id ? "#000" : t.color,
-            borderColor: tool === t.id ? t.color : t.color + "55",
-            fontWeight: tool === t.id ? "bold" : "normal",
-            flexShrink: 0,
-          }}
         >
-          {t.icon}
+          <t.Icon />
           <span className="btn-label"> {t.label}</span>
           <span className="shortcut"> [{t.shortcut}]</span>
         </button>

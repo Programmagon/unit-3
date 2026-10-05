@@ -1,0 +1,139 @@
+/* ═══════════════════════════════════════════════════════════════
+   Unit-3 — Theme-Tokens (Dark = Standard, Light per [data-theme="light"])
+   Werte rechnerisch geprüft (Kontraste, Farbsehschwäche, Schriftdichte) —
+   siehe SCHRITT-6A-GUI.md. Nicht „nach Gefühl“ ändern, ohne neu zu messen.
+
+   Grundidee: Die Farbtöne (tone-*) sind in BEIDEN Themes identisch und
+   werden als Fläche benutzt. Wo Farbe als Schrift gebraucht wird, nimmt man
+   ink-*; in Light ist das neutral oder ein dunkleres Grün/Rot.
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: dark;
+
+  /* Flächen und Linien */
+  --bg-app: #0f141f;
+  --bg-ui: #171c29;
+  --bg-raised: #212736;
+  --border-ui: #363d4d;
+  --border-strong: #515b70;
+
+  /* Schrift */
+  --text: #e8ebf2;
+  --text-muted: #b4bbc8;
+  --text-dim: #949bab;
+
+  /* Marke (Teal aus dem Logo): Fokusring, Slider */
+  --accent: #63c9b7;
+
+  /* Farbtöne als FLÄCHE: aktive Buttons, Hover-Tönung, Chips. Gleiche Werte in Dark und Light. */
+  --tone-action: #83bbea;
+  --tone-confirm: #6cdc90;
+  --tone-danger: #ff7d7c;
+  --tone-cable: #23e885;
+  --tone-inv: #ec9f07;
+  --tone-delay: #ed51bd;
+
+  /* Farbtöne als SCHRIFT/ICON (Kontrast ≥ 4,5:1). Dark: = tone-*. Light: neutral bzw. dunkleres Grün/Rot. */
+  --ink-action: #83bbea;
+  --ink-confirm: #6cdc90;
+  --ink-danger: #ff7d7c;
+  --ink-cable: #23e885;
+  --ink-inv: #ec9f07;
+  --ink-delay: #ed51bd;
+
+  /* Vollflächen-Buttons (Play/Pause) und Schrift darauf; Kontur um helle Flächen */
+  --solid-confirm: #58cd78;
+  --solid-danger: #f97676;
+  --on-solid: #0d0f15;
+  --edge-solid: transparent;
+
+  /* Zellen — erst im CANVAS-Schritt benutzt. -edge = Kontur um gefüllte Zelle, -off = Füllung, -off-line = Kontur */
+  --cell-cable: #23e885;
+  --cell-cable-edge: #23e885;
+  --cell-cable-off: #004521;
+  --cell-cable-off-line: #3a955e;
+  --cell-inv: #ec9f07;
+  --cell-inv-edge: #ec9f07;
+  --cell-inv-off: #4e3100;
+  --cell-inv-off-line: #a27739;
+  --cell-delay: #ed51bd;
+  --cell-delay-edge: #ed51bd;
+  --cell-delay-off: #591f46;
+  --cell-delay-off-line: #b45d96;
+
+  /* Raster — erst im CANVAS-Schritt benutzt (alle 8 Linien betont) */
+  --grid-line: #1f242f;
+  --grid-line-major: #30343f;
+
+  /* Schriftgewichte (Roboto Mono ist variabel). Light ist leicht kräftiger: dunkle Schrift auf hellem Grund trägt bei gleichem Gewicht weniger Tinte. */
+  --fw-text: 400;
+  --fw-medium: 500;
+  --fw-strong: 700;
+
+  /* Schrift und Größen */
+  --font: 'Roboto Mono Variable', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --fs-xs: 11px;   /* kleinste erlaubte Schrift (Hinweise, Zähler) */
+  --fs-sm: 12px;   /* Buttons, Labels */
+  --fs-md: 13px;   /* Meldungen */
+
+  --touch-target: 44px;
+  --radius-ui: 4px;
+  --radius-panel: 6px;
+  --shadow-float: 0 4px 16px rgba(0, 0, 0, 0.45);
+
+  --icon-size: 18px;
+  --icon-stroke: 2;
+  --icon-cap: round;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* Flächen und Linien */
+  --bg-app: #eaf1f8;
+  --bg-ui: #f7fafe;
+  --bg-raised: #fdfeff;
+  --border-ui: #c8d2dd;
+  --border-strong: #91a0b1;
+
+  /* Schrift */
+  --text: #15202d;
+  --text-muted: #424e5e;
+  --text-dim: #566170;
+
+  /* Marke (Teal aus dem Logo): Fokusring, Slider */
+  --accent: #116c63;
+
+  /* Farbtöne als SCHRIFT/ICON (Kontrast ≥ 4,5:1). Dark: = tone-*. Light: neutral bzw. dunkleres Grün/Rot. */
+  --ink-action: #15202d;
+  --ink-confirm: #00763a;
+  --ink-danger: #c31830;
+  --ink-cable: #15202d;
+  --ink-inv: #15202d;
+  --ink-delay: #15202d;
+
+  /* Vollflächen-Buttons (Play/Pause) und Schrift darauf; Kontur um helle Flächen */
+  --edge-solid: color-mix(in srgb, #0d0f15 32%, transparent);
+
+  /* Zellen — erst im CANVAS-Schritt benutzt. -edge = Kontur um gefüllte Zelle, -off = Füllung, -off-line = Kontur */
+  --cell-cable-edge: #459563;
+  --cell-cable-off: #f7fafe;
+  --cell-cable-off-line: #459563;
+  --cell-inv-edge: #b57a0a;
+  --cell-inv-off: #f7fafe;
+  --cell-inv-off-line: #b57a0a;
+  --cell-delay-edge: #d754ad;
+  --cell-delay-off: #f7fafe;
+  --cell-delay-off-line: #d754ad;
+
+  /* Raster — erst im CANVAS-Schritt benutzt (alle 8 Linien betont) */
+  --grid-line: #d5dce4;
+  --grid-line-major: #bfc7cf;
+
+  /* Schriftgewichte (Roboto Mono ist variabel). Light ist leicht kräftiger: dunkle Schrift auf hellem Grund trägt bei gleichem Gewicht weniger Tinte. */
+  --fw-text: 450;
+  --fw-medium: 550;
+
+  --shadow-float: 0 4px 16px rgba(20, 35, 60, 0.18);
+}
