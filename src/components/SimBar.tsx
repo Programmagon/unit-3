@@ -4,6 +4,8 @@ import {
   IconUndo, IconRedo, IconStep, IconPlay, IconPause,
   IconTrash, IconSave, IconOpen, IconImport,
 } from './icons';
+import { HzControl } from './HzControl';
+import { ThemeToggle } from './ThemeToggle';
 
 interface SimBarProps {
   /** Speichert Grid + Kamera als .u3-Datei. Wird von App.tsx implementiert. */
@@ -20,9 +22,9 @@ interface SimBarProps {
 
 /**
  * Simulations-Steuerung: Play/Pause, Schritt, Hz-Slider, Reset, Save/Load.
- * Ab ≤1260px (Tablet-Kompaktmodus in index.css) blendet CSS .hz-control
- * komplett aus; Reset/Undo/Redo/Schritt/Save/Load verlieren nur ihr
- * Textlabel (.btn-label) und bleiben als Icon sichtbar. Der Wrapper hier
+ * Ab ≤1694px zeigt CSS den Hz-Regler stattdessen in der Statusleiste
+ * (SimControls); Reset/Undo/Redo/Schritt/Save/Load verlieren stufenweise ihr
+ * Kürzel bzw. Textlabel (.btn-label) und bleiben als Icon sichtbar. Der Wrapper hier
  * hat bewusst KEIN flexShrink:0 — er soll sich mit der Toolbar (App.tsx)
  * den verfügbaren Platz fair teilen, statt sie zusammenzudrücken.
  */
@@ -30,8 +32,6 @@ export function SimBar({ onSave, onLoad, onImportSelection }: SimBarProps) {
   const step       = useGridStore(s => s.step);
   const running    = useGridStore(s => s.isRunning);
   const setRunning = useGridStore(s => s.setRunning);
-  const hz         = useGridStore(s => s.hz);
-  const setHz      = useGridStore(s => s.setHz);
   const clear      = useGridStore(s => s.clear);
   const undo       = useGridStore(s => s.undo);
   const redo       = useGridStore(s => s.redo);
@@ -108,15 +108,8 @@ export function SimBar({ onSave, onLoad, onImportSelection }: SimBarProps) {
         <span className="shortcut">[Space]</span>
       </button>
 
-      {/* Hz-Slider — wird auf Mobile via CSS ausgeblendet */}
-      <label className="hz-control">
-        <input
-          type="range"
-          min={1} max={30} value={hz}
-          onChange={e => setHz(+e.target.value)}
-        />
-        <span className="hz-value">{hz} Hz</span>
-      </label>
+      {/* Hz-Regler: hier ab 1695 px, darunter in der Statusleiste (CSS) */}
+      <HzControl where="bar" />
 
       {/* Reset */}
       <button
@@ -156,6 +149,9 @@ export function SimBar({ onSave, onLoad, onImportSelection }: SimBarProps) {
       >
         <IconImport /><span className="btn-label">Import</span>
       </button>
+
+      <div className="bar-divider" />
+      <ThemeToggle />
     </div>
   );
 }

@@ -28,6 +28,9 @@ export {
   Check as IconCheck,
   X as IconClose,
   Eraser as IconErase,
+  Sun as IconSun,
+  Moon as IconMoon,
+  Monitor as IconMonitor,
   SquareDashedMousePointer as IconSelect,
   TriangleAlert as IconWarning,
 } from 'lucide-react';

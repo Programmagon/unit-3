@@ -4,7 +4,6 @@ import { key } from "../simulation/grid";
 import {
   getCellAt,
   clientToCanvas,
-  zoomAtPoint,
   type Camera,
 } from "./coordinates";
 

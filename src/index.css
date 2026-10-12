@@ -223,6 +223,9 @@ body {
   white-space: nowrap;
   cursor: pointer;
   flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent; /* kein grauer iOS/Android-Tap-Kasten */
+  touch-action: manipulation;               /* kein Doppeltipp-Zoom, kein 300-ms-Delay */
+  transition: background-color 0.12s, border-color 0.12s, transform 0.06s;
 }
 .btn--confirm {
   --tone: var(--tone-confirm);
@@ -245,8 +248,32 @@ body {
   --ink: var(--ink-delay);
 }
 
-.btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--tone) 10%, transparent);
+/* Hover NUR für echte Zeiger (Maus/Trackpad). Auf Touch bleibt :hover nach dem
+   Tippen „kleben" — das wirkte wie ein dauerhaft gedrückter Knopf. */
+@media (hover: hover) and (pointer: fine) {
+  /* Umriss-Knöpfe: Fläche 22 % Tonfarbe über der Leiste + kräftigerer Rand */
+  .btn:hover:not(:disabled):not([aria-pressed="true"]):not(.btn--solid) {
+    background: color-mix(in srgb, var(--tone) 22%, var(--bg-ui));
+    border-color: color-mix(in srgb, var(--ink) 80%, transparent);
+  }
+  /* Gefüllte Knöpfe (aktives Werkzeug, Play/Pause): heller statt dunkler.
+     Die Füllung bleibt erhalten — der frühere Hover-Stil überschrieb sie
+     mit 10 % Transparenz, dadurch stand dunkle Schrift auf dunklem Grund. */
+  .btn[aria-pressed="true"]:hover:not(:disabled),
+  .btn--solid:hover:not(:disabled) {
+    background-image: linear-gradient(rgb(255 255 255 / 0.22), rgb(255 255 255 / 0.22));
+  }
+}
+/* Kurzes Tipp-/Klick-Feedback; endet sofort beim Loslassen (auch auf Touch). */
+.btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.btn:active:not(:disabled):not([aria-pressed="true"]):not(.btn--solid) {
+  background: color-mix(in srgb, var(--tone) 30%, var(--bg-ui));
+}
+.btn[aria-pressed="true"]:active:not(:disabled),
+.btn--solid:active:not(:disabled) {
+  background-image: linear-gradient(rgb(0 0 0 / 0.14), rgb(0 0 0 / 0.14));
 }
 .btn:disabled {
   opacity: 0.45;
@@ -322,6 +349,11 @@ body {
 .hz-control input[type="range"] {
   width: 65px;
   accent-color: var(--accent);
+  touch-action: pan-y; /* waagerechtes Ziehen gehört dem Regler */
+}
+.hz-control--status {
+  margin-right: auto; /* ohne Hilfetext (≤1260 px) linksbündig */
+  padding-right: 12px; /* Abstand zu „Schritt:“ */
 }
 .hz-control .hz-value {
   color: var(--text);
@@ -374,23 +406,25 @@ body {
   color: var(--ink-danger);
 }
 
-/* ── Tablet-Kompaktmodus (≤ 1260px) ──────────────────────────── */
-/* Verhindert, dass Toolbar + SimBar auf iPad-Breiten (768–1194px)  */
-/* und schmalen Desktop-Fenstern die Top-Bar sprengen: Hz-Regler    */
-/* verschwindet, Reset/Tool-/Sim-Buttons werden Icon-only.          */
-/* (Reset bleibt als Icon sichtbar, nur reset-btn selbst NICHT      */
-/* ausblenden — die .btn-label-Regel unten erledigt den Rest.)      */
-@media (max-width: 1260px) {
-  .hz-control {
-    display: none !important;
-  }
-  .hint-text {
-    display: none;
-  }
-  .top-bar .btn-label {
-    display: none;
-  }
+/* ── Top-Bar: gestaffelte Verdichtung ────────────────────────────
+   Gemessen (Einzeilenbreite beider Reihen zusammen, inkl. Theme-Knopf):
+     volle Beschriftung + Kürzel + Hz   1899 px
+     ohne Kürzel                        1692 px
+     ohne Kürzel, ohne Hz               1584 px
+     nur Icons                           936 px
+   Jede Stufe greift ~10 px oberhalb ihrer Breite, damit nie umgebrochen wird.
+   Ändert sich ein Knopf, diese Zahlen neu messen.
+   Der Hz-Regler verschwindet NIE, er wandert nur: Top-Bar (breit) ↔ Statusleiste. */
+.hz-control--status { display: none; }
+@media (max-width: 1911px) { .top-bar .shortcut { display: none; } }
+@media (max-width: 1694px) {
+  .hz-control--bar { display: none; }
+  .hz-control--status { display: flex; }
 }
+@media (max-width: 1586px) { .top-bar .btn-label { display: none; } }
+@media (max-width: 1260px) { .hint-text { display: none; } }
+/* Ab 956 px passt alles in eine Zeile: nicht umbrechen, sondern bei Bedarf seitlich scrollen */
+@media (min-width: 956px) { .top-bar .scroll-row { flex-wrap: nowrap; } }
 
 /* ── Mobile-Layout (< 600px) ────────────────────────────────── */
 @media (max-width: 599px) {
@@ -413,6 +447,21 @@ body {
   /* Logo weicht den Buttons (Bottom-Bar) */
   .logo {
     display: none !important;
+  }
+
+  /* Trenner würden beim Umbrechen allein am Zeilenanfang stehen */
+  .top-bar .bar-divider {
+    display: none;
+  }
+
+  /* Statusleiste: Hz-Regler mit Touch-Höhe, breiterer Schieber */
+  .status-row {
+    min-height: var(--touch-target);
+    gap: 12px;
+  }
+  .hz-control--status input[type="range"] {
+    width: 140px;
+    height: 32px;
   }
 
   /* Schritt-Overlay einblenden */

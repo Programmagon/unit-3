@@ -1,6 +1,7 @@
 import { useGridStore } from '../store/gridStore';
 import { useUIStore }   from '../store/uiStore';
 import { IconWarning }  from './icons';
+import { HzControl }    from './HzControl';
 
 /**
  * Statusleiste — Loop-Error-Banner + Zähler + Hilfetext.
@@ -40,6 +41,7 @@ export function SimControls() {
       {/* Zähler + Hilfetext */}
       <div className="status-row">
         <span className="hint-text">{hint}</span>
+        <HzControl where="status" />
         <span className="status-item">
           Schritt: <span className="status-num">{steps}</span>
         </span>

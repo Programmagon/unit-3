@@ -8,6 +8,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="color-scheme" content="dark light" />
   <meta name="theme-color" content="#171c29" />
+  <!-- Theme VOR dem ersten Zeichnen setzen (kein Aufblitzen). Gleiche Logik wie src/lib/theme.ts. -->
+  <script>
+    (function () {
+      try {
+        var p = localStorage.getItem('u3.theme');
+        var t = (p === 'light' || p === 'dark') ? p : (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+        document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    })();
+  </script>
   <title>Unit 3</title>
 </head>
 
