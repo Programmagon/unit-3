@@ -128,6 +128,14 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
   // Commit/Cancel, …) → ebenfalls dirty
   useEffect(() => { dirtyRef.current = true; }, [selection]);
 
+  // Themenwechsel (Hell/Dunkel, auch „auto“ folgt dem System) → neu zeichnen.
+  // Die Farben liest der Renderer aus theme.css (siehe canvas/cellStyle.ts).
+  useEffect(() => {
+    const mo = new MutationObserver(() => { dirtyRef.current = true; });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => mo.disconnect();
+  }, []);
+
   // ── HiDPI-Resize ──────────────────────────────────────────────────────
   useEffect(() => {
     const c = canvasRef.current!;

@@ -1,7 +1,7 @@
 /**
  * Farbschema: Einstellung (auto | light | dark) → aufgelöstes Theme (light | dark).
  * Das aufgelöste Theme steht IMMER als data-theme am <html>-Element; theme.css
- * und der Canvas (canvas/theme.ts) reagieren nur darauf. Kein React-Import.
+ * und der Canvas (canvas/cellStyle.ts) reagieren nur darauf. Kein React-Import.
  */
 export type ThemePref = 'auto' | 'light' | 'dark';
 export type ThemeName = 'light' | 'dark';

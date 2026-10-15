@@ -62,9 +62,11 @@
   --cell-delay-off: #591f46;
   --cell-delay-off-line: #b45d96;
 
-  /* Raster — erst im CANVAS-Schritt benutzt (alle 8 Linien betont) */
-  --grid-line: #1f242f;
-  --grid-line-major: #30343f;
+  /* Canvas-Hintergrund (alle 8 Raster-Linien betont). Bewusst etwas heller als --bg-app
+     (im Render-Labor getestet). Das Raster leitet canvas/cellStyle.ts daraus ab
+     (Dunkel: 6 %/12 % Weiß, Hell: 8 %/15 % Schwarz) — keine eigenen Rasterfarben mehr nötig.
+     Raster-Kontrast nicht neu gemessen. */
+  --canvas-bg: #131a26;
 
   /* Schriftgewichte (Roboto Mono ist variabel). Light ist leicht kräftiger: dunkle Schrift auf hellem Grund trägt bei gleichem Gewicht weniger Tinte. */
   --fw-text: 400;
@@ -127,9 +129,8 @@
   --cell-delay-off: #f7fafe;
   --cell-delay-off-line: #d754ad;
 
-  /* Raster — erst im CANVAS-Schritt benutzt (alle 8 Linien betont) */
-  --grid-line: #d5dce4;
-  --grid-line-major: #bfc7cf;
+  /* Canvas-Hintergrund; Raster wird daraus abgeleitet (siehe oben) */
+  --canvas-bg: #eaf1f8;
 
   /* Schriftgewichte (Roboto Mono ist variabel). Light ist leicht kräftiger: dunkle Schrift auf hellem Grund trägt bei gleichem Gewicht weniger Tinte. */
   --fw-text: 450;
