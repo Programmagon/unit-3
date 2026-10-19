@@ -5,6 +5,7 @@ import { Toolbar }      from './components/Toolbar';
 import { SimBar }       from './components/SimBar';
 import { SimControls }  from './components/SimControls';
 import { SelectionActions } from './components/SelectionActions';
+import { SettingsMenu } from './components/SettingsMenu';
 import { useGridStore } from './store/gridStore';
 import { useSelectionStore } from './store/selectionStore';
 import { useKeyboardShortcuts } from './store/useKeyboardShortcuts';
@@ -149,6 +150,7 @@ export default function App() {
         <div className="step-overlay">
           {steps} Schritte · {cells} Zellen
         </div>
+        <SettingsMenu />
       </div>
 
       {/* ── Statusleiste ─────────────────────────────────────────

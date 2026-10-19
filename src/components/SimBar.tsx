@@ -6,6 +6,7 @@ import {
 } from './icons';
 import { HzControl } from './HzControl';
 import { ThemeToggle } from './ThemeToggle';
+import { SettingsButton } from './SettingsMenu';
 
 interface SimBarProps {
   /** Speichert Grid + Kamera als .u3-Datei. Wird von App.tsx implementiert. */
@@ -22,7 +23,7 @@ interface SimBarProps {
 
 /**
  * Simulations-Steuerung: Play/Pause, Schritt, Hz-Slider, Reset, Save/Load.
- * Ab ≤1694px zeigt CSS den Hz-Regler stattdessen in der Statusleiste
+ * Ab ≤1754px zeigt CSS den Hz-Regler stattdessen in der Statusleiste
  * (SimControls); Reset/Undo/Redo/Schritt/Save/Load verlieren stufenweise ihr
  * Kürzel bzw. Textlabel (.btn-label) und bleiben als Icon sichtbar. Der Wrapper hier
  * hat bewusst KEIN flexShrink:0 — er soll sich mit der Toolbar (App.tsx)
@@ -108,7 +109,7 @@ export function SimBar({ onSave, onLoad, onImportSelection }: SimBarProps) {
         <span className="shortcut">[Space]</span>
       </button>
 
-      {/* Hz-Regler: hier ab 1695 px, darunter in der Statusleiste (CSS) */}
+      {/* Hz-Regler: hier ab 1755 px, darunter in der Statusleiste (CSS) */}
       <HzControl where="bar" />
 
       {/* Reset */}
@@ -152,6 +153,7 @@ export function SimBar({ onSave, onLoad, onImportSelection }: SimBarProps) {
 
       <div className="bar-divider" />
       <ThemeToggle />
+      <SettingsButton />
     </div>
   );
 }

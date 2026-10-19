@@ -2,6 +2,7 @@ import { forwardRef, useRef, useEffect, useCallback, useImperativeHandle } from 
 import { useGridStore }      from '../store/gridStore';
 import { useUIStore }        from '../store/uiStore';
 import { useSelectionStore } from '../store/selectionStore';
+import { useSettingsStore }  from '../store/settingsStore';
 import { renderFrame, renderSelectionOverlay } from '../canvas/renderer';
 import { PointerController } from '../canvas/input';
 import { zoomAtPoint, getCellAt } from '../canvas/coordinates';
@@ -136,6 +137,11 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
     return () => mo.disconnect();
   }, []);
 
+  // Darstellungs-Einstellung geändert (Menü) → neu zeichnen. Der Store schreibt
+  // CELL_STYLE VOR dieser Meldung (er hat sich zuerst angemeldet), der nächste
+  // Frame zeichnet also schon mit den neuen Werten.
+  useEffect(() => useSettingsStore.subscribe(() => { dirtyRef.current = true; }), []);
+
   // ── HiDPI-Resize ──────────────────────────────────────────────────────
   useEffect(() => {
     const c = canvasRef.current!;
@@ -156,7 +162,7 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
     const ctrl = new PointerController(
       c,
       {
-        onPlace: (cx, cy, isDrag) => {
+        onPlace: (cx, cy, isDrag, tapPointerType) => {
           const t  = toolRef.current;
           const g  = gridRef.current;
           const k  = `${cx},${cy}`;
@@ -173,8 +179,13 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
           } else if (!isDrag) {
             const cell = g.get(k)!;
             if (cell.type === t) {
-              // Gleicher Typ + Tap → Forced togglen (⊕ an/aus)
-              toggleForced(cx, cy);
+              // Gleicher Typ + Tap → Forced togglen (⊕ an/aus). Ausnahme: Touch/Stift
+              // mit Einstellung "Tippen = Löschen" (Menü → Bedienung) → Zelle löschen.
+              const tapDeletes =
+                tapPointerType !== undefined && tapPointerType !== 'mouse' &&
+                useSettingsStore.getState().settings.touchTap === 'delete';
+              if (tapDeletes) delCell(cx, cy);
+              else toggleForced(cx, cy);
             } else {
               // Anderer Typ → Typ wechseln, Force zurücksetzen
               setCell(cx, cy, t, cell.state);
@@ -183,6 +194,11 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
         },
 
         onDelete: (cx, cy) => delCell(cx, cy),
+
+        // Long-Press bei "Tippen = Löschen": Force (⊕) einer vorhandenen Zelle umschalten
+        onToggleForced: (cx, cy) => {
+          if (gridRef.current.has(`${cx},${cy}`)) toggleForced(cx, cy);
+        },
 
         // Kamera direkt mutieren — kein Zustand, kein Re-Render
         onPan: (dx, dy) => {
@@ -247,6 +263,8 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
       // Siehe getSelectionHit-Doku im PointerController-Konstruktor: hat
       // Nebenwirkungen (Commit/Anheben), ist kein reiner Hit-Test mehr.
       (cx, cy) => resolvePointerDown({ x: cx, y: cy }),
+      // Gerade Linie / Tipp-Verhalten aus dem Einstellungsmenü, bei jedem Ereignis frisch gelesen
+      () => useSettingsStore.getState().settings,
     );
 
     ctrlRef.current = ctrl;

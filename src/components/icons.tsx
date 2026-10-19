@@ -33,6 +33,7 @@ export {
   Monitor as IconMonitor,
   SquareDashedMousePointer as IconSelect,
   TriangleAlert as IconWarning,
+  Settings as IconSettings,
 } from 'lucide-react';
 
 /* Zelltyp-Icons — gleiche Linienführung wie die Glyphen im Canvas

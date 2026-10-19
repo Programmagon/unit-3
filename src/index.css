@@ -407,24 +407,25 @@ body {
 }
 
 /* ── Top-Bar: gestaffelte Verdichtung ────────────────────────────
-   Gemessen (Einzeilenbreite beider Reihen zusammen, inkl. Theme-Knopf):
-     volle Beschriftung + Kürzel + Hz   1899 px
-     ohne Kürzel                        1692 px
-     ohne Kürzel, ohne Hz               1584 px
-     nur Icons                           936 px
+   Gemessen (Einzeilenbreite beider Reihen zusammen, inkl. Theme- und
+   Einstellungs-Knopf; der Zahnrad-Knopf hat jede Stufe um 50 px verbreitert):
+     volle Beschriftung + Kürzel + Hz   1959 px
+     ohne Kürzel                        1752 px
+     ohne Kürzel, ohne Hz               1644 px
+     nur Icons                           996 px
    Jede Stufe greift ~10 px oberhalb ihrer Breite, damit nie umgebrochen wird.
    Ändert sich ein Knopf, diese Zahlen neu messen.
    Der Hz-Regler verschwindet NIE, er wandert nur: Top-Bar (breit) ↔ Statusleiste. */
 .hz-control--status { display: none; }
-@media (max-width: 1911px) { .top-bar .shortcut { display: none; } }
-@media (max-width: 1694px) {
+@media (max-width: 1961px) { .top-bar .shortcut { display: none; } }
+@media (max-width: 1754px) {
   .hz-control--bar { display: none; }
   .hz-control--status { display: flex; }
 }
-@media (max-width: 1586px) { .top-bar .btn-label { display: none; } }
+@media (max-width: 1646px) { .top-bar .btn-label { display: none; } }
 @media (max-width: 1260px) { .hint-text { display: none; } }
-/* Ab 956 px passt alles in eine Zeile: nicht umbrechen, sondern bei Bedarf seitlich scrollen */
-@media (min-width: 956px) { .top-bar .scroll-row { flex-wrap: nowrap; } }
+/* Ab 1006 px passt alles in eine Zeile: nicht umbrechen, sondern bei Bedarf seitlich scrollen */
+@media (min-width: 1006px) { .top-bar .scroll-row { flex-wrap: nowrap; } }
 
 /* ── Mobile-Layout (< 600px) ────────────────────────────────── */
 @media (max-width: 599px) {
@@ -472,4 +473,131 @@ body {
   /* hz-control, hint-text und alle .btn-label in der Top-Bar sind
      bereits durch den ≤1260px-Kompaktmodus oben abgedeckt (599px ist eine
      Teilmenge davon) — hier nur noch, was spezifisch für echtes Mobile ist. */
+}
+
+/* ── Einstellungsmenü ───────────────────────────────────────────
+   Am PC ein Seitenpanel rechts IM Canvas-Bereich (.canvas-area ist
+   position:relative), auf dem Handy ein Bottom-Sheet. Kein Hintergrund-
+   Schleier: der Canvas dahinter soll sichtbar bleiben, damit man die
+   Wirkung einer Änderung sofort sieht. */
+.settings-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(340px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-ui);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-float);
+  color: var(--text);
+  z-index: 20;
+}
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px 0 12px;
+  min-height: var(--touch-target);
+  border-bottom: 1px solid var(--border-ui);
+  flex-shrink: 0;
+  touch-action: none; /* Wegziehen am Kopf darf nicht scrollen */
+}
+.settings-head h2 {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-strong);
+  margin-right: auto;
+}
+.settings-grip {
+  display: none; /* nur im Bottom-Sheet */
+}
+.settings-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  user-select: none;
+}
+.settings-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: var(--touch-target);
+  border-bottom: 1px solid var(--border-ui);
+  margin-bottom: 8px;
+}
+.settings-section-head h3 {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-strong);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.settings-reset {
+  --ink: var(--text-muted);
+  --tone: var(--text-muted);
+  border-color: transparent;
+  padding: 0 8px;
+}
+.settings-field {
+  margin-bottom: 14px;
+}
+.settings-label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  margin-bottom: 6px;
+}
+.settings-seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.settings-seg .btn {
+  flex: 1 1 auto;
+  white-space: normal;
+  text-align: center;
+}
+.settings-hint {
+  margin-top: 6px;
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+.settings-reset-all {
+  align-self: stretch;
+  margin-top: 4px;
+}
+
+@media (max-width: 599px) {
+  .settings-panel {
+    top: auto;
+    left: 0;
+    width: auto;
+    max-height: 72%;
+    border-left: none;
+    border-top: 1px solid var(--border-strong);
+    border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+  }
+  .settings-grip {
+    display: block;
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    width: 36px;
+    height: 4px;
+    margin-left: -18px;
+    border-radius: 2px;
+    background: var(--border-strong);
+  }
+  .settings-head {
+    position: relative;
+    padding-top: 10px;
+  }
 }

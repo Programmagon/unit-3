@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { getThemePref, setThemePref, type ThemePref } from '../lib/theme';
+import { setThemePref, type ThemePref } from '../lib/theme';
+import { useThemePref } from '../lib/useThemePref';
 import { IconMonitor, IconSun, IconMoon } from './icons';
 
 const ORDER: ThemePref[] = ['auto', 'light', 'dark'];
@@ -7,7 +7,7 @@ const LABEL: Record<ThemePref, string> = { auto: 'Automatisch', light: 'Hell', d
 
 /** Ein Knopf, der reihum wechselt: Automatisch → Hell → Dunkel. */
 export function ThemeToggle() {
-  const [pref, setPref] = useState<ThemePref>(getThemePref);
+  const pref = useThemePref();
   const next = ORDER[(ORDER.indexOf(pref) + 1) % ORDER.length];
   const Icon = pref === 'auto' ? IconMonitor : pref === 'light' ? IconSun : IconMoon;
   const text = `Farbschema: ${LABEL[pref]} — klicken für ${LABEL[next]}`;
@@ -17,7 +17,7 @@ export function ThemeToggle() {
       type="button"
       aria-label={text}
       title={text}
-      onClick={() => { setThemePref(next); setPref(next); }}
+      onClick={() => setThemePref(next)}
     >
       <Icon />
     </button>

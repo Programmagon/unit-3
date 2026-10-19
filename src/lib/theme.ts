@@ -7,6 +7,13 @@ export type ThemePref = 'auto' | 'light' | 'dark';
 export type ThemeName = 'light' | 'dark';
 
 const KEY = 'u3.theme';
+const listeners = new Set<() => void>();
+
+/** Für UI, die die Einstellung anzeigt (ThemeToggle, Einstellungsmenü): meldet jede Änderung von setThemePref. */
+export function subscribeThemePref(fn: () => void): () => void {
+  listeners.add(fn);
+  return () => { listeners.delete(fn); };
+}
 const query = () => window.matchMedia('(prefers-color-scheme: light)');
 
 export function getThemePref(): ThemePref {
@@ -33,6 +40,7 @@ export function setThemePref(pref: ThemePref): void {
     if (pref === 'auto') localStorage.removeItem(KEY); else localStorage.setItem(KEY, pref);
   } catch { /* Speicher gesperrt: Einstellung gilt nur für diese Sitzung */ }
   applyTheme(pref);
+  listeners.forEach(fn => fn());
 }
 
 /** Einmal beim Start (vor dem ersten Rendern). Folgt dem System, solange „auto“ gewählt ist. */

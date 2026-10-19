@@ -60,6 +60,20 @@ export const CELL_STYLE: CellStyle = {
   grid: true,
 };
 
+/**
+ * Die Werte aus dem Code (oben), unverändert festgehalten. Das Einstellungsmenü
+ * (store/settingsStore.ts) überschreibt CELL_STYLE zur Laufzeit und setzt bei
+ * „Zurücksetzen“ auf genau diese Werte zurück — wer CELL_STYLE oben zum Testen
+ * ändert, ändert damit also den Standard des Menüs.
+ */
+export const CODE_DEFAULTS: Readonly<CellStyle> = { ...CELL_STYLE };
+
+/** Überschreibt Felder von CELL_STYLE zur Laufzeit und verwirft die gemerkte Palette. */
+export function applyCellStyle(patch: Partial<CellStyle>): void {
+  Object.assign(CELL_STYLE, patch);
+  cached = null;
+}
+
 export interface Palette {
   theme: ThemeName;
   bg: string;
@@ -98,6 +112,9 @@ const OFF_TONES: Record<string, { cable: string; s: number; l: number } | { mix:
   'E Mix 35%':      { mix: 0.35 },
   'F Mix 45%':      { mix: 0.45 },
 };
+
+/** Namen der wählbaren Aus-Töne (für das Einstellungsmenü) */
+export const OFF_TONE_NAMES: readonly string[] = Object.keys(OFF_TONES);
 
 function toHsl(hex: string): [number, number, number] {
   const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);

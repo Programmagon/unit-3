@@ -63,7 +63,10 @@ export function useKeyboardShortcuts(getPasteAnchor?: () => [number, number] | n
     };
 
     const onKey = (e: KeyboardEvent) => {
-      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+      const target = e.target as HTMLElement;
+      if (['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
+      // Einstellungsmenü & Co.: Leertaste/Buchstaben dort gehören dem fokussierten Bedienelement
+      if (target.closest?.('[data-no-shortcuts]')) return;
 
       // Reine Einzeltasten-Shortcuts (1/2/3/E/S/R/F/Pfeile) müssen Strg/Cmd/
       // Alt ignorieren, sonst kollidieren sie mit Browser-Shortcuts wie

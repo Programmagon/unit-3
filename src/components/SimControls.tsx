@@ -1,5 +1,6 @@
 import { useGridStore } from '../store/gridStore';
 import { useUIStore }   from '../store/uiStore';
+import { useSettingsStore } from '../store/settingsStore';
 import { IconWarning }  from './icons';
 import { HzControl }    from './HzControl';
 
@@ -18,14 +19,18 @@ export function SimControls() {
   const cells     = useGridStore(s => s.grid.size);
   const loopError = useGridStore(s => s.loopError);
   const tool      = useUIStore(s => s.tool);
+  const touchTap  = useSettingsStore(s => s.settings.touchTap);
 
   const hint = tool === 'select'
     ? 'Ziehen: Auswählen (ersetzt vorherige Auswahl) · Ziehen auf Selektion: ' +
       'Aufheben & Verschieben · R / Umschalt+R: Drehen · F / Umschalt+F: Spiegeln · Pfeiltasten: ' +
       'zellenweise verschieben · Enter: Bestätigen · Esc: Abbrechen · ' +
       'Strg+C/X/V/D: Kopieren/Ausschneiden/Einfügen/Duplizieren'
-    : 'Klick: Platzieren · Gleicher Typ: Force · Rechtsklick/Long-Press: Löschen · ' +
-      'Alt+Drag: Schwenken · Scroll/Pinch: Zoom';
+    : touchTap === 'delete'
+      ? 'Klick: Platzieren · Gleicher Typ: Force (Touch: Löschen) · Rechtsklick: Löschen · Long-Press: Force · ' +
+        'Alt+Drag: Schwenken · Scroll/Pinch: Zoom'
+      : 'Klick: Platzieren · Gleicher Typ: Force · Rechtsklick/Long-Press: Löschen · ' +
+        'Alt+Drag: Schwenken · Scroll/Pinch: Zoom';
 
   return (
     <div className="status-bar">
