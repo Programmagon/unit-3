@@ -6,19 +6,23 @@ import { SimBar }       from './components/SimBar';
 import { SimControls }  from './components/SimControls';
 import { SelectionActions } from './components/SelectionActions';
 import { SettingsMenu } from './components/SettingsMenu';
+import { ProjectsPanel } from './components/ProjectsPanel';
 import { useGridStore } from './store/gridStore';
 import { useSelectionStore } from './store/selectionStore';
 import { useKeyboardShortcuts } from './store/useKeyboardShortcuts';
-import { serialize, deserialize, SerializeError, deserializeSelection } from './lib/serializer';
+import { serialize, deserialize, deserializeSelection } from './lib/serializer';
 import { saveToFile, loadFromFile } from './lib/fileIO';
+import { useProjectStore, bindCamera, restoreSession, startAutosave } from './store/projectStore';
+import { useT, errorText } from './i18n';
 
-/** `unit3-projekt-YYYY-MM-DD.u3` — Datum wird beim Speichern generiert. */
-function suggestedFilename() {
+/** `unit3-projekt-YYYY-MM-DD.u3` bzw. `unit3-project-…` — Datum wird beim Speichern generiert. */
+function suggestedFilename(lang: 'de' | 'en') {
   const d = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  return `unit3-projekt-${d}.u3`;
+  return `unit3-${lang === 'de' ? 'projekt' : 'project'}-${d}.u3`;
 }
 
 export default function App() {
+  const t         = useT();
   const step      = useGridStore(s => s.step);
   const isRunning = useGridStore(s => s.isRunning);
   const hz        = useGridStore(s => s.hz);
@@ -37,6 +41,18 @@ export default function App() {
   useKeyboardShortcuts(() =>
     canvasRef.current?.getLastPointerCell() ?? canvasRef.current?.getViewportCenterCell() ?? null
   );
+
+  // Projekte: Kamera anmelden, letzten Arbeitsstand wiederherstellen, Autosave starten.
+  // (Kind-Refs sind in Effekten des Elternteils bereits gesetzt.)
+  useEffect(() => {
+    bindCamera({
+      get: () => canvasRef.current?.getCameraSnapshot() ?? null,
+      set: cam => canvasRef.current?.setCameraSnapshot(cam),
+    });
+    restoreSession();
+    const stop = startAutosave();
+    return () => { stop(); bindCamera(null); };
+  }, []);
 
   // Simulations-Schleife
   useEffect(() => {
@@ -63,9 +79,9 @@ export default function App() {
     const freshGrid = useGridStore.getState().grid;
     const json = serialize(freshGrid, camera);
     try {
-      await saveToFile(json, suggestedFilename(), 'Unit-3 Datei', { 'application/json': ['.u3'] });
+      await saveToFile(json, suggestedFilename(t.lang), 'Unit-3', { 'application/json': ['.u3'] });
     } catch {
-      alert('Datei konnte nicht gespeichert werden.');
+      alert(t('err.saveFile'));
     }
   };
 
@@ -84,9 +100,9 @@ export default function App() {
       const { grid: loaded, camera } = deserialize(text);
       loadGrid(loaded);
       canvasRef.current?.setCameraSnapshot(camera);
+      useProjectStore.getState().detach();
     } catch (e) {
-      const msg = e instanceof SerializeError ? e.message : 'Datei konnte nicht gelesen werden';
-      alert(msg);
+      alert(errorText(e));
     }
   };
 
@@ -109,13 +125,12 @@ export default function App() {
       // Form und werden alle stillschweigend übersprungen). Ohne diesen
       // Hinweis sieht das wie "Import tut nichts" aus.
       if (cells.length === 0) {
-        alert('Die Datei enthält keine gültigen Zellen — falsches Dateiformat gewählt?');
+        alert(t('err.noCells'));
         return;
       }
       useSelectionStore.getState().setClipboardFromBuffer(cells);
     } catch (e) {
-      const msg = e instanceof SerializeError ? e.message : 'Datei konnte nicht gelesen werden';
-      alert(msg);
+      alert(errorText(e));
     }
   };
 
@@ -148,9 +163,10 @@ export default function App() {
         <Canvas ref={canvasRef} />
         <SelectionActions getPasteAnchor={() => canvasRef.current?.getViewportCenterCell() ?? null} />
         <div className="step-overlay">
-          {steps} Schritte · {cells} Zellen
+          {t('status.overlay', { steps, cells })}
         </div>
         <SettingsMenu />
+        <ProjectsPanel />
       </div>
 
       {/* ── Statusleiste ─────────────────────────────────────────

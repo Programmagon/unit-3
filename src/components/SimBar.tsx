@@ -2,11 +2,14 @@ import { useGridStore } from '../store/gridStore';
 import { useSelectionStore } from '../store/selectionStore';
 import {
   IconUndo, IconRedo, IconStep, IconPlay, IconPause,
-  IconTrash, IconSave, IconOpen, IconImport,
+  IconTrash, IconSave, IconOpen, IconImport, IconProjects,
 } from './icons';
 import { HzControl } from './HzControl';
 import { ThemeToggle } from './ThemeToggle';
 import { SettingsButton } from './SettingsMenu';
+import { useSettingsStore } from '../store/settingsStore';
+import { useT } from '../i18n';
+import { useKeys } from '../lib/useKeys';
 
 interface SimBarProps {
   /** Speichert Grid + Kamera als .u3-Datei. Wird von App.tsx implementiert. */
@@ -30,6 +33,10 @@ interface SimBarProps {
  * den verfügbaren Platz fair teilen, statt sie zusammenzudrücken.
  */
 export function SimBar({ onSave, onLoad, onImportSelection }: SimBarProps) {
+  const t          = useT();
+  const keys       = useKeys();
+  const projectsOpen = useSettingsStore(s => s.panel === 'projects');
+  const openPanel  = useSettingsStore(s => s.openPanel);
   const step       = useGridStore(s => s.step);
   const running    = useGridStore(s => s.isRunning);
   const setRunning = useGridStore(s => s.setRunning);
@@ -53,19 +60,21 @@ export function SimBar({ onSave, onLoad, onImportSelection }: SimBarProps) {
         className="btn undo-btn"
         onClick={undo}
         disabled={!canUndo}
-        title="Rückgängig [Strg+Z]"
-        aria-label="Rückgängig"
+        title={keys.titled(t('bar.undoTitle'), 'undo')}
+        data-key={keys.badge('undo')}
+        aria-label={t('bar.undo')}
       >
-        <IconUndo /><span className="btn-label">Undo</span>
+        <IconUndo /><span className="btn-label">{t('bar.undo')}</span>
       </button>
       <button
         className="btn redo-btn"
         onClick={redo}
         disabled={!canRedo}
-        title="Wiederherstellen [Strg+Y]"
-        aria-label="Wiederherstellen"
+        title={keys.titled(t('bar.redoTitle'), 'redo')}
+        data-key={keys.badge('redo')}
+        aria-label={t('bar.redo')}
       >
-        <IconRedo /><span className="btn-label">Redo</span>
+        <IconRedo /><span className="btn-label">{t('bar.redo')}</span>
       </button>
 
       {/* Trenner */}
@@ -85,11 +94,12 @@ export function SimBar({ onSave, onLoad, onImportSelection }: SimBarProps) {
           step();
         }}
         disabled={running}
-        title="Schritt [.]"
-        aria-label="Schritt"
+        title={keys.titled(t('bar.stepTitle'), 'step')}
+        data-key={keys.badge('step')}
+        aria-label={t('bar.step')}
       >
-        <IconStep /><span className="shortcut">[.]</span>
-        <span className="btn-label">Schritt</span>
+        <IconStep />
+        <span className="btn-label">{t('bar.step')}</span>
       </button>
 
       {/* Play / Pause */}
@@ -101,12 +111,12 @@ export function SimBar({ onSave, onLoad, onImportSelection }: SimBarProps) {
           }
           setRunning(!running);
         }}
-        title={`${running ? 'Pause' : 'Play'} [Space]`}
-        aria-label={running ? 'Pause' : 'Play'}
+        title={keys.titled(running ? t('bar.pauseTitle') : t('bar.playTitle'), 'play')}
+        data-key={keys.badge('play')}
+        aria-label={running ? t('bar.pause') : t('bar.play')}
       >
         {running ? <IconPause fill="currentColor" /> : <IconPlay fill="currentColor" />}
-        {running ? 'Pause' : 'Play'}
-        <span className="shortcut">[Space]</span>
+        {running ? t('bar.pause') : t('bar.play')}
       </button>
 
       {/* Hz-Regler: hier ab 1755 px, darunter in der Statusleiste (CSS) */}
@@ -116,10 +126,10 @@ export function SimBar({ onSave, onLoad, onImportSelection }: SimBarProps) {
       <button
         className="btn btn--danger reset-btn"
         onClick={clear}
-        title="Zurücksetzen"
-        aria-label="Zurücksetzen"
+        title={t('bar.clearTitle')}
+        aria-label={t('bar.clear')}
       >
-        <IconTrash /><span className="btn-label">Reset</span>
+        <IconTrash /><span className="btn-label">{t('bar.clear')}</span>
       </button>
 
       {/* Trenner */}
@@ -129,26 +139,39 @@ export function SimBar({ onSave, onLoad, onImportSelection }: SimBarProps) {
       <button
         className="btn save-btn"
         onClick={onSave}
-        title="Speichern (.u3)"
-        aria-label="Speichern"
+        title={t('bar.saveTitle')}
+        aria-label={t('bar.save')}
       >
-        <IconSave /><span className="btn-label">Speichern</span>
+        <IconSave /><span className="btn-label">{t('bar.save')}</span>
       </button>
       <button
         className="btn load-btn"
         onClick={onLoad}
-        title="Öffnen (.u3/.json)"
-        aria-label="Öffnen"
+        title={t('bar.openTitle')}
+        aria-label={t('bar.open')}
       >
-        <IconOpen /><span className="btn-label">Öffnen</span>
+        <IconOpen /><span className="btn-label">{t('bar.open')}</span>
       </button>
       <button
         className="btn"
         onClick={onImportSelection}
-        title="Selektion importieren (.u3sel)"
-        aria-label="Selektion importieren"
+        title={t('bar.importTitle')}
+        aria-label={t('bar.import')}
       >
-        <IconImport /><span className="btn-label">Import</span>
+        <IconImport /><span className="btn-label">{t('bar.import')}</span>
+      </button>
+      <button
+        id="projects-btn"
+        className="btn"
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={projectsOpen}
+        aria-controls="projects-panel"
+        onClick={() => openPanel(projectsOpen ? null : 'projects')}
+        title={t('bar.projectsTitle')}
+        aria-label={t('bar.projects')}
+      >
+        <IconProjects /><span className="btn-label">{t('bar.projects')}</span>
       </button>
 
       <div className="bar-divider" />

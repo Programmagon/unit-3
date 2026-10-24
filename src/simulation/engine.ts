@@ -3,7 +3,7 @@ import { key, fromKey, DIRS4 } from './grid';
 
 export class SimLoopError extends Error {
   constructor() {
-    super('Kombinatorische Schleife ohne Verzögerer — füge einen Verzögerer in die Schleife ein.');
+    super('Combinational loop without a delay');
     this.name = 'SimLoopError';
   }
 }

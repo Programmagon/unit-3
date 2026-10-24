@@ -1,272 +1,266 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react';
-import { useSettingsStore, type Overrides, type Settings } from '../store/settingsStore';
+import { useState } from 'react';
+import {
+  useSettingsStore, TWEAK_KEYS, type Overrides, type Settings, type LangPref, type KeyHints,
+} from '../store/settingsStore';
 import { OFF_TONE_NAMES } from '../canvas/cellStyle';
-import { setThemePref, type ThemePref } from '../lib/theme';
+import { LOOKS, getLook } from '../canvas/looks';
+import { setThemePref, getThemePref, type ThemePref } from '../lib/theme';
 import { useThemePref } from '../lib/useThemePref';
-import { IconClose, IconRotateCcw, IconSettings } from './icons';
+import { APP_VERSION, FEEDBACK_URL } from '../lib/appInfo';
+import { useT, resolveLang, type TFunc } from '../i18n';
+import { PanelShell } from './PanelShell';
+import { Segmented, Section, type Option } from './PanelParts';
+import { LookPreview } from './LookPreview';
+import { KeyBindings } from './KeyBindings';
+import { useKeymapStore } from '../store/keymapStore';
+import { IconFeedback, IconRotateCcw, IconSettings } from './icons';
 
 /** Der Zahnrad-Knopf in der SimBar. Öffnet und schließt das Menü. */
 export function SettingsButton() {
-  const open = useSettingsStore(s => s.menuOpen);
-  const setOpen = useSettingsStore(s => s.setMenuOpen);
+  const t = useT();
+  const open = useSettingsStore(s => s.panel === 'settings');
+  const openPanel = useSettingsStore(s => s.openPanel);
   return (
     <button
       id="settings-btn"
       className="btn"
       type="button"
-      aria-label="Einstellungen"
+      aria-label={t('set.open')}
       aria-haspopup="dialog"
       aria-expanded={open}
       aria-controls="settings-panel"
-      title="Einstellungen"
-      onClick={() => setOpen(!open)}
+      title={t('set.open')}
+      onClick={() => openPanel(open ? null : 'settings')}
     >
       <IconSettings />
     </button>
   );
 }
 
-// ── Bausteine ────────────────────────────────────────────────────────
+// ── Feedback-Bericht ─────────────────────────────────────────────────
 
-interface Option<T> { value: T; label: string; title?: string }
-
-/** Auswahl mit nebeneinanderliegenden Knöpfen (alle Optionen auf einen Blick, gut für Touch). */
-function Segmented<T extends string | boolean | null>(props: {
-  label: string;
-  value: T;
-  options: Option<T>[];
-  onChange: (v: T) => void;
-  hint?: ReactNode;
-}) {
-  const { label, value, options, onChange, hint } = props;
-  const labelId = useId();
-  return (
-    <div className="settings-field">
-      <div className="settings-label" id={labelId}>{label}</div>
-      <div className="settings-seg" role="group" aria-labelledby={labelId}>
-        {options.map(o => (
-          <button
-            key={String(o.value)}
-            type="button"
-            className="btn"
-            aria-pressed={o.value === value}
-            title={o.title}
-            onClick={() => onChange(o.value)}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
-      {hint && <p className="settings-hint">{hint}</p>}
-    </div>
-  );
+function buildReport(t: TFunc, settings: Settings, overrides: Overrides): string {
+  const look = getLook(settings.look);
+  const touch = window.matchMedia('(pointer: coarse)').matches;
+  const tweaks = TWEAK_KEYS.filter(k => overrides[k] !== undefined);
+  return [
+    `Unit-3 ${APP_VERSION}`,
+    `Look: ${look.letter} (${t(`look.${look.id}.name`)})${tweaks.length ? ` + ${tweaks.map(k => `${k}=${String(settings[k])}`).join(', ')}` : ''}`,
+    `Farbschema/Theme: ${getThemePref()} → ${document.documentElement.dataset.theme ?? '?'}`,
+    `Sprache/Language: ${settings.language} → ${resolveLang(settings.language)}`,
+    `Gerade Linie: ${settings.straightLine} · Tippen: ${settings.touchTap}`,
+    `Fenster: ${window.innerWidth}×${window.innerHeight} @${window.devicePixelRatio || 1}x · Touch: ${touch ? 'ja' : 'nein'}`,
+    `Browser: ${navigator.userAgent}`,
+    '',
+    '— Feedback / Your feedback: —',
+    '',
+  ].join('\n');
 }
 
-function Section(props: { title: string; onReset: () => void; children: ReactNode }) {
-  return (
-    <section className="settings-section">
-      <div className="settings-section-head">
-        <h3>{props.title}</h3>
-        <button
-          type="button"
-          className="btn settings-reset"
-          title={`${props.title}: auf Standard zurücksetzen`}
-          aria-label={`${props.title} zurücksetzen`}
-          onClick={props.onReset}
-        >
-          <IconRotateCcw /><span>Zurücksetzen</span>
-        </button>
-      </div>
-      {props.children}
-    </section>
-  );
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // Fallback für Kontexte ohne Clipboard-API (ältere iPadOS-Versionen, http)
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch { return false; }
+  }
 }
-
-const THEME_OPTIONS: Option<ThemePref>[] = [
-  { value: 'auto', label: 'Automatisch', title: 'Folgt dem System' },
-  { value: 'light', label: 'Hell' },
-  { value: 'dark', label: 'Dunkel' },
-];
-
-const OFF_TONE_OPTIONS: Option<string | null>[] = [
-  { value: null, label: 'Original', title: 'Feste Aus-Farben aus theme.css' },
-  ...OFF_TONE_NAMES.map(n => ({ value: n, label: n.slice(0, 1), title: n })),
-];
 
 // ── Menü ─────────────────────────────────────────────────────────────
 
 /**
- * Einstellungsmenü. Am PC ein Seitenpanel rechts im Canvas-Bereich, auf dem
- * Handy ein Bottom-Sheet (CSS, .settings-panel in index.css). Änderungen
- * gelten sofort — man sieht hinter dem Panel, was sie am Canvas bewirken.
- *
- * Kein Fokus-Fang (nicht modal): der Canvas bleibt bedienbar. Esc schließt das
- * Menü und gibt den Fokus an den Zahnrad-Knopf zurück. data-no-shortcuts hält
- * die globalen Tastenkürzel (Leertaste = Play, Buchstaben = Werkzeug) aus dem
- * Panel heraus.
+ * Einstellungsmenü. Änderungen gelten sofort — man sieht hinter dem Panel,
+ * was sie am Canvas bewirken. Die Looks stehen oben mit Vorschau, damit
+ * Beta-Testende die Optik vergleichen und gezielt Feedback geben können.
  */
 export function SettingsMenu() {
-  const open       = useSettingsStore(s => s.menuOpen);
-  const setOpen    = useSettingsStore(s => s.setMenuOpen);
+  return (
+    <PanelShell id="settings" title="set.title" closeLabel="set.close">
+      <SettingsContent />
+    </PanelShell>
+  );
+}
+
+function SettingsContent() {
+  const t          = useT();
   const settings   = useSettingsStore(s => s.settings);
+  const overrides  = useSettingsStore(s => s.overrides);
   const setSetting = useSettingsStore(s => s.setSetting);
+  const setLook    = useSettingsStore(s => s.setLook);
   const reset      = useSettingsStore(s => s.resetSettings);
   const themePref  = useThemePref();
-  const closeRef   = useRef<HTMLButtonElement>(null);
-  const dragStartY = useRef<number | null>(null);
-
-  const close = () => {
-    setOpen(false);
-    document.getElementById('settings-btn')?.focus();
-  };
-
-  // Fokus ins Panel beim Öffnen; Esc schließt (Capture-Phase, damit der globale
-  // Esc-Handler nicht gleichzeitig eine Auswahl aufhebt).
-  useEffect(() => {
-    if (!open) return;
-    closeRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.stopPropagation();
-      e.preventDefault();
-      setOpen(false);
-      document.getElementById('settings-btn')?.focus();
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [open, setOpen]);
-
-  if (!open) return null;
+  const resetKeys_ = useKeymapStore(s => s.resetAll);
+  const [note, setNote] = useState<string | null>(null);
 
   const set = <K extends keyof Overrides>(key: K) => (v: Overrides[K]) => setSetting(key, v);
   const resetKeys = (...keys: (keyof Overrides)[]) => () => reset(keys);
-  const customShape = settings.cellShape === 'custom';
+  const tweaked = TWEAK_KEYS.some(k => overrides[k] !== undefined);
+
+  const themeOptions: Option<ThemePref>[] = [
+    { value: 'auto',  label: t('theme.auto'), title: t('set.schemeAutoTitle') },
+    { value: 'light', label: t('theme.light') },
+    { value: 'dark',  label: t('theme.dark') },
+  ];
+  const onOff = [{ value: true, label: t('common.on') }, { value: false, label: t('common.off') }];
+  const offToneOptions: Option<string | null>[] = [
+    { value: null, label: t('set.offTone.original'), title: t('set.offTone.originalTitle') },
+    ...OFF_TONE_NAMES.map(n => ({ value: n, label: n.slice(0, 1), title: n })),
+  ];
+  const langOptions: Option<LangPref>[] = [
+    { value: 'auto', label: t('set.lang.auto') },
+    { value: 'de',   label: 'Deutsch' },
+    { value: 'en',   label: 'English' },
+  ];
+
+  const sendFeedback = async () => {
+    const ok = await copyText(buildReport(t, settings, overrides));
+    setNote(ok ? t('set.feedbackCopied') : t('set.feedbackFailed'));
+    if (ok && FEEDBACK_URL) window.open(FEEDBACK_URL, '_blank', 'noopener');
+  };
 
   return (
-    <aside
-      id="settings-panel"
-      className="settings-panel"
-      role="dialog"
-      aria-label="Einstellungen"
-      data-no-shortcuts
-    >
-      {/* Kopf: auf dem Handy auch Griff zum Wegziehen nach unten */}
-      <header
-        className="settings-head"
-        onPointerDown={e => {
-          if ((e.target as HTMLElement).closest('button')) return;
-          dragStartY.current = e.clientY;
-          e.currentTarget.setPointerCapture(e.pointerId);
-        }}
-        onPointerUp={e => {
-          const y0 = dragStartY.current;
-          dragStartY.current = null;
-          if (y0 !== null && e.clientY - y0 > 60) close();
-        }}
-        onPointerCancel={() => { dragStartY.current = null; }}
+    <>
+      <Section title={t('set.sec.look')} onReset={resetKeys('look')}>
+        <div className="look-grid" role="group" aria-label={t('set.sec.look')}>
+          {LOOKS.map(l => (
+            <button
+              key={l.id}
+              type="button"
+              className="look-card"
+              aria-pressed={settings.look === l.id}
+              onClick={() => setLook(l.id)}
+            >
+              <LookPreview look={l.id} />
+              <span className="look-name"><b>{l.letter}</b> {t(`look.${l.id}.name`)}</span>
+              <span className="look-desc">{t(`look.${l.id}.desc`)}</span>
+            </button>
+          ))}
+        </div>
+        <p className="settings-hint">
+          {t('set.lookHint')}{tweaked ? ` ${t('set.lookTweaked')}.` : ''}
+        </p>
+      </Section>
+
+      <Section
+        title={t('set.sec.appearance')}
+        onReset={() => { setThemePref('auto'); reset([...TWEAK_KEYS]); }}
       >
-        <span className="settings-grip" aria-hidden />
-        <h2>Einstellungen</h2>
-        <button
-          ref={closeRef}
-          type="button"
-          className="btn"
-          aria-label="Einstellungen schließen"
-          title="Schließen [Esc]"
-          onClick={close}
-        >
-          <IconClose />
-        </button>
-      </header>
+        <Segmented<ThemePref>
+          label={t('set.scheme')}
+          value={themePref}
+          options={themeOptions}
+          onChange={setThemePref}
+        />
+        <Segmented<Settings['glyph']>
+          label={t('set.glyph')}
+          value={settings.glyph}
+          options={[
+            { value: 'none', label: t('set.glyph.none') },
+            { value: 'sel',  label: t('set.glyph.sel'), title: t('set.glyph.selTitle') },
+            { value: 'line', label: t('set.glyph.line') },
+            { value: 'dot',  label: t('set.glyph.dot') },
+          ]}
+          onChange={set('glyph')}
+        />
+        <Segmented<boolean>
+          label={t('set.glow')}
+          value={settings.glow}
+          options={onOff}
+          onChange={set('glow')}
+          hint={t('set.glowHint')}
+        />
+        <Segmented<boolean>
+          label={t('set.grid')}
+          value={settings.grid}
+          options={onOff}
+          onChange={set('grid')}
+        />
+        <Segmented<string | null>
+          label={t('set.offTone')}
+          value={settings.offTone}
+          options={offToneOptions}
+          onChange={set('offTone')}
+          hint={t('set.offToneHint')}
+        />
+      </Section>
 
-      <div className="settings-body">
-        <Section
-          title="Darstellung"
-          onReset={() => {
-            setThemePref('auto');
-            reset(['cellShape', 'glyph', 'glow', 'grid', 'offTone']);
-          }}
-        >
-          <Segmented<ThemePref>
-            label="Farbschema"
-            value={themePref}
-            options={THEME_OPTIONS}
-            onChange={setThemePref}
-          />
-          <Segmented<Settings['cellShape']>
-            label="Zell-Stil"
-            value={settings.cellShape}
-            options={[
-              { value: 'join',   label: 'Verschmolzen' },
-              { value: 'seam',   label: 'Mit Fuge' },
-              { value: 'single', label: 'Einzeln' },
-            ]}
-            onChange={v => { if (v !== 'custom') set('cellShape')(v); }}
-            hint={customShape ? 'Aktuell: eigene Werte aus cellStyle.ts. Eine Auswahl ersetzt sie.' : undefined}
-          />
-          <Segmented<Settings['glyph']>
-            label="Symbole"
-            value={settings.glyph}
-            options={[
-              { value: 'none', label: 'Keine' },
-              { value: 'sel',  label: 'Umk./Verz.', title: 'Nur Umkehrer und Verzögerer' },
-              { value: 'line', label: 'Alle' },
-              { value: 'dot',  label: 'Punkt' },
-            ]}
-            onChange={set('glyph')}
-          />
-          <Segmented<boolean>
-            label="Leuchten"
-            value={settings.glow}
-            options={[{ value: true, label: 'An' }, { value: false, label: 'Aus' }]}
-            onChange={set('glow')}
-            hint="Wirkt nur im dunklen Schema."
-          />
-          <Segmented<boolean>
-            label="Raster"
-            value={settings.grid}
-            options={[{ value: true, label: 'An' }, { value: false, label: 'Aus' }]}
-            onChange={set('grid')}
-          />
-          <Segmented<string | null>
-            label="Aus-Farben"
-            value={settings.offTone}
-            options={OFF_TONE_OPTIONS}
-            onChange={set('offTone')}
-            hint={<>Ausgeschaltete Zellen im dunklen Schema. C/D: satter, E/F: mit Hintergrund gemischt. Namen per Tooltip.</>}
-          />
-        </Section>
+      <Section title={t('set.sec.controls')} onReset={resetKeys('straightLine', 'touchTap')}>
+        <Segmented<Settings['straightLine']>
+          label={t('set.straight')}
+          value={settings.straightLine}
+          options={[
+            { value: 'auto',  label: t('set.straight.auto') },
+            { value: 'off',   label: t('set.straight.off') },
+            { value: 'shift', label: t('set.straight.shift'), title: t('set.straight.shiftTitle') },
+          ]}
+          onChange={set('straightLine')}
+          hint={t('set.straightHint')}
+        />
+        <Segmented<Settings['touchTap']>
+          label={t('set.tap')}
+          value={settings.touchTap}
+          options={[
+            { value: 'power',  label: t('set.tap.power') },
+            { value: 'delete', label: t('set.tap.delete') },
+          ]}
+          onChange={set('touchTap')}
+          hint={settings.touchTap === 'power' ? t('set.tapHintPower') : t('set.tapHintDelete')}
+        />
+      </Section>
 
-        <Section title="Bedienung" onReset={resetKeys('straightLine', 'touchTap')}>
-          <Segmented<Settings['straightLine']>
-            label="Gerade Linie"
-            value={settings.straightLine}
-            options={[
-              { value: 'auto',  label: 'Automatisch' },
-              { value: 'off',   label: 'Aus' },
-              { value: 'shift', label: 'Mit Umschalt', title: 'Nur solange die Umschalttaste gehalten wird (braucht Tastatur)' },
-            ]}
-            onChange={set('straightLine')}
-            hint="Automatisch: Beim Ziehen rastet die Richtung nach 2 Zellen auf waagerecht oder senkrecht ein. „Mit Umschalt“ braucht eine Tastatur. Beim Löschen gibt es keine Sperre."
-          />
-          <Segmented<Settings['touchTap']>
-            label="Tippen auf Zelle (Touch/Stift)"
-            value={settings.touchTap}
-            options={[
-              { value: 'power',  label: 'Powern' },
-              { value: 'delete', label: 'Löschen' },
-            ]}
-            onChange={set('touchTap')}
-            hint={settings.touchTap === 'power'
-              ? 'Tippen auf eine Zelle des gleichen Typs schaltet ⊕ (Force) um. Langes Drücken löscht, auch beim Weiterziehen.'
-              : 'Tippen auf eine Zelle des gleichen Typs löscht sie. Langes Drücken schaltet ⊕ (Force) um. Wischen zum Löschen geht mit dem Werkzeug „Löschen“.'}
-          />
-        </Section>
+      <Section
+        title={t('set.sec.keys')}
+        onReset={() => { reset(['keyHints']); resetKeys_(); }}
+      >
+        <Segmented<KeyHints>
+          label={t('set.keyHints')}
+          value={settings.keyHints}
+          options={[
+            { value: 'auto', label: t('set.keyHints.auto') },
+            { value: 'on',   label: t('set.keyHints.on') },
+            { value: 'off',  label: t('set.keyHints.off') },
+          ]}
+          onChange={set('keyHints')}
+          hint={t('set.keyHintsHint')}
+        />
+        <KeyBindings />
+      </Section>
 
-        <button type="button" className="btn btn--danger settings-reset-all" onClick={() => { setThemePref('auto'); reset(); }}>
-          <IconRotateCcw /><span>Alle Einstellungen zurücksetzen</span>
-        </button>
-      </div>
-    </aside>
+      <Section title={t('set.sec.general')} onReset={resetKeys('language')}>
+        <Segmented<LangPref>
+          label={t('set.lang')}
+          value={settings.language}
+          options={langOptions}
+          onChange={set('language')}
+        />
+        <div className="settings-field">
+          <div className="settings-label">{t('set.feedback')}</div>
+          <button type="button" className="btn" onClick={sendFeedback}>
+            <IconFeedback /><span>{t('set.feedbackBtn')}</span>
+          </button>
+          <p className="settings-hint" role="status">{note ?? t('set.feedbackHint')}</p>
+        </div>
+        <p className="settings-hint">{t('set.version', { v: APP_VERSION })}</p>
+      </Section>
+
+      <button
+        type="button"
+        className="btn btn--danger settings-reset-all"
+        onClick={() => { setThemePref('auto'); reset(); resetKeys_(); setNote(null); }}
+      >
+        <IconRotateCcw /><span>{t('set.resetAll')}</span>
+      </button>
+    </>
   );
 }

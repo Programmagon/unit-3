@@ -23,8 +23,11 @@ export {
   CopyPlus as IconDuplicate,
   RotateCw as IconRotateCw,
   RotateCcw as IconRotateCcw,
-  FlipHorizontal2 as IconFlipH,
-  FlipVertical2 as IconFlipV,
+  // Achtung: lucide benennt diese Icons nach der ACHSE, nicht nach der Wirkung.
+  // FlipVertical2 zeigt eine senkrechte Achse mit Dreiecken links/rechts = links↔rechts
+  // spiegeln = unser „horizontal“ (flipSelection('x')); FlipHorizontal2 entsprechend umgekehrt.
+  FlipVertical2 as IconFlipH,
+  FlipHorizontal2 as IconFlipV,
   Check as IconCheck,
   X as IconClose,
   Eraser as IconErase,
@@ -34,6 +37,10 @@ export {
   SquareDashedMousePointer as IconSelect,
   TriangleAlert as IconWarning,
   Settings as IconSettings,
+  Archive as IconProjects,
+  Pencil as IconRename,
+  Plus as IconPlus,
+  MessageSquareText as IconFeedback,
 } from 'lucide-react';
 
 /* Zelltyp-Icons — gleiche Linienführung wie die Glyphen im Canvas

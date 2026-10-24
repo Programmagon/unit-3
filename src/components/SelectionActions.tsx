@@ -3,6 +3,8 @@ import { extractRegion } from '../canvas/selection';
 import { useGridStore } from '../store/gridStore';
 import { serializeSelection } from '../lib/serializer';
 import { saveToFile }         from '../lib/fileIO';
+import { useT }               from '../i18n';
+import { useKeys }            from '../lib/useKeys';
 import {
   IconCheck, IconClose, IconCopy, IconCut, IconPaste, IconDuplicate,
   IconRotateCw, IconRotateCcw, IconFlipH, IconFlipV, IconExport, IconTrash,
@@ -33,6 +35,8 @@ interface SelectionActionsProps {
  * dafür erscheinen nur, solange tatsächlich etwas schwebt.
  */
 export function SelectionActions({ getPasteAnchor }: SelectionActionsProps) {
+  const t          = useT();
+  const keys       = useKeys();
   const selection  = useSelectionStore(s => s.selection);
   const clipboard  = useSelectionStore(s => s.clipboard);
   const copySelection    = useSelectionStore(s => s.copySelection);
@@ -63,9 +67,9 @@ export function SelectionActions({ getPasteAnchor }: SelectionActionsProps) {
     const json = serializeSelection(buffer);
     const d = new Date().toISOString().slice(0, 10);
     try {
-      await saveToFile(json, `unit3-selektion-${d}.u3sel`, 'Unit-3 Selektion', { 'application/json': ['.u3sel'] });
+      await saveToFile(json, `unit3-${t.lang === 'de' ? 'selektion' : 'selection'}-${d}.u3sel`, 'Unit-3 Selektion', { 'application/json': ['.u3sel'] });
     } catch {
-      alert('Selektion konnte nicht exportiert werden.');
+      alert(t('err.exportSelection'));
     }
   };
 
@@ -79,73 +83,73 @@ export function SelectionActions({ getPasteAnchor }: SelectionActionsProps) {
     <div className="selection-actions">
       {isFloating && (
         <>
-          <button className="btn btn--ghost btn--confirm" onClick={commitFloating} title="Bestätigen [Enter]" aria-label="Bestätigen">
-            <IconCheck /><span className="btn-label">Bestätigen</span><span className="shortcut">[Enter]</span>
+          <button className="btn btn--ghost btn--confirm" onClick={commitFloating} title={keys.titled(t('sel.confirmTitle'), 'Enter')} aria-label={t('sel.confirm')}>
+            <IconCheck /><span className="btn-label">{t('sel.confirm')}</span><span className="shortcut">[Enter]</span>
           </button>
-          <button className="btn btn--ghost btn--danger" onClick={cancelFloating} title="Abbrechen [Esc]" aria-label="Abbrechen">
-            <IconClose /><span className="btn-label">Abbrechen</span><span className="shortcut">[Esc]</span>
+          <button className="btn btn--ghost btn--danger" onClick={cancelFloating} title={keys.titled(t('sel.cancelTitle'), 'Esc')} aria-label={t('sel.cancel')}>
+            <IconClose /><span className="btn-label">{t('sel.cancel')}</span><span className="shortcut">[Esc]</span>
           </button>
           <div className="sel-action-divider" />
         </>
       )}
 
       {hasSelection && (
-        <button className="btn btn--ghost" onClick={copySelection} title="Kopieren [Strg+C]" aria-label="Kopieren">
-          <IconCopy /><span className="btn-label">Kopieren</span><span className="shortcut">[Strg+C]</span>
+        <button className="btn btn--ghost" onClick={copySelection} title={keys.titled(t('sel.copyTitle'), 'copy')} aria-label={t('sel.copy')}>
+          <IconCopy /><span className="btn-label">{t('sel.copy')}</span><span className="shortcut">[{keys.label('copy')}]</span>
         </button>
       )}
       {hasSelection && (
-        <button className="btn btn--ghost" onClick={cutSelection} title="Ausschneiden [Strg+X]" aria-label="Ausschneiden">
-          <IconCut /><span className="btn-label">Ausschneiden</span><span className="shortcut">[Strg+X]</span>
+        <button className="btn btn--ghost" onClick={cutSelection} title={keys.titled(t('sel.cutTitle'), 'cut')} aria-label={t('sel.cut')}>
+          <IconCut /><span className="btn-label">{t('sel.cut')}</span><span className="shortcut">[{keys.label('cut')}]</span>
         </button>
       )}
       {hasClipboard && (
-        <button className="btn btn--ghost" onClick={handlePaste} title="Einfügen [Strg+V]" aria-label="Einfügen">
-          <IconPaste /><span className="btn-label">Einfügen</span><span className="shortcut">[Strg+V]</span>
+        <button className="btn btn--ghost" onClick={handlePaste} title={keys.titled(t('sel.pasteTitle'), 'paste')} aria-label={t('sel.paste')}>
+          <IconPaste /><span className="btn-label">{t('sel.paste')}</span><span className="shortcut">[{keys.label('paste')}]</span>
         </button>
       )}
       {hasSelection && (
-        <button className="btn btn--ghost" onClick={duplicateSelection} title="Duplizieren [Strg+D]" aria-label="Duplizieren">
-          <IconDuplicate /><span className="btn-label">Duplizieren</span><span className="shortcut">[Strg+D]</span>
-        </button>
-      )}
-
-      {showDividers && <div className="sel-action-divider" />}
-
-      {hasSelection && (
-        <button className="btn btn--ghost" onClick={() => rotateSelection(1)} title="Im Uhrzeigersinn drehen [R]" aria-label="Im Uhrzeigersinn drehen">
-          <IconRotateCw /><span className="btn-label">Drehen +90°</span><span className="shortcut">[R]</span>
-        </button>
-      )}
-      {hasSelection && (
-        <button className="btn btn--ghost" onClick={() => rotateSelection(-1)} title="Gegen den Uhrzeigersinn drehen [Umschalt+R]" aria-label="Gegen den Uhrzeigersinn drehen">
-          <IconRotateCcw /><span className="btn-label">Drehen −90°</span><span className="shortcut">[Umschalt+R]</span>
-        </button>
-      )}
-      {hasSelection && (
-        <button className="btn btn--ghost" onClick={() => flipSelection('x')} title="Horizontal spiegeln [F]" aria-label="Horizontal spiegeln">
-          <IconFlipH /><span className="btn-label">Horizontal</span><span className="shortcut">[F]</span>
-        </button>
-      )}
-      {hasSelection && (
-        <button className="btn btn--ghost" onClick={() => flipSelection('y')} title="Vertikal spiegeln [Umschalt+F]" aria-label="Vertikal spiegeln">
-          <IconFlipV /><span className="btn-label">Vertikal</span><span className="shortcut">[Umschalt+F]</span>
+        <button className="btn btn--ghost" onClick={duplicateSelection} title={keys.titled(t('sel.duplicateTitle'), 'duplicate')} aria-label={t('sel.duplicate')}>
+          <IconDuplicate /><span className="btn-label">{t('sel.duplicate')}</span><span className="shortcut">[{keys.label('duplicate')}]</span>
         </button>
       )}
 
       {showDividers && <div className="sel-action-divider" />}
 
       {hasSelection && (
-        <button className="btn btn--ghost" onClick={handleExport} title="Selektion exportieren (.u3sel)" aria-label="Selektion exportieren">
-          <IconExport /><span className="btn-label">Exportieren</span>
+        <button className="btn btn--ghost" onClick={() => rotateSelection(1)} title={keys.titled(t('sel.rotateCwTitle'), 'rotateCw')} aria-label={t('sel.rotateCwTitle')}>
+          <IconRotateCw /><span className="btn-label">{t('sel.rotateCw')}</span><span className="shortcut">[{keys.label('rotateCw')}]</span>
+        </button>
+      )}
+      {hasSelection && (
+        <button className="btn btn--ghost" onClick={() => rotateSelection(-1)} title={keys.titled(t('sel.rotateCcwTitle'), 'rotateCcw')} aria-label={t('sel.rotateCcwTitle')}>
+          <IconRotateCcw /><span className="btn-label">{t('sel.rotateCcw')}</span><span className="shortcut">[{keys.label('rotateCcw')}]</span>
+        </button>
+      )}
+      {hasSelection && (
+        <button className="btn btn--ghost" onClick={() => flipSelection('x')} title={keys.titled(t('sel.flipHTitle'), 'flipH')} aria-label={t('sel.flipHTitle')}>
+          <IconFlipH /><span className="btn-label">{t('sel.flipH')}</span><span className="shortcut">[{keys.label('flipH')}]</span>
+        </button>
+      )}
+      {hasSelection && (
+        <button className="btn btn--ghost" onClick={() => flipSelection('y')} title={keys.titled(t('sel.flipVTitle'), 'flipV')} aria-label={t('sel.flipVTitle')}>
+          <IconFlipV /><span className="btn-label">{t('sel.flipV')}</span><span className="shortcut">[{keys.label('flipV')}]</span>
         </button>
       )}
 
       {showDividers && <div className="sel-action-divider" />}
 
       {hasSelection && (
-        <button className="btn btn--ghost btn--danger" onClick={deleteSelectionContents} title="Löschen [Entf]" aria-label="Löschen">
-          <IconTrash /><span className="btn-label">Löschen</span><span className="shortcut">[Entf]</span>
+        <button className="btn btn--ghost" onClick={handleExport} title={t('sel.exportTitle')} aria-label={t('sel.export')}>
+          <IconExport /><span className="btn-label">{t('sel.export')}</span>
+        </button>
+      )}
+
+      {showDividers && <div className="sel-action-divider" />}
+
+      {hasSelection && (
+        <button className="btn btn--ghost btn--danger" onClick={deleteSelectionContents} title={keys.titled(t('sel.deleteTitle'), 'deleteSel')} aria-label={t('sel.delete')}>
+          <IconTrash /><span className="btn-label">{t('sel.delete')}</span><span className="shortcut">[{keys.label('deleteSel')}]</span>
         </button>
       )}
     </div>

@@ -150,12 +150,12 @@ function offToneColor(name: string, type: CellType, on: string, bg: string): str
 const CSS_NAME: Record<CellType, string> = { cable: 'cable', inverter: 'inv', delay: 'delay' };
 const TYPES: CellType[] = ['cable', 'inverter', 'delay'];
 
-function buildPalette(theme: ThemeName): Palette {
+function buildPalette(theme: ThemeName, st: Readonly<CellStyle>): Palette {
   const cs = getComputedStyle(document.documentElement);
   const v = (name: string) => cs.getPropertyValue(name).trim();
   const dark = theme === 'dark';
   const bg = v('--canvas-bg');
-  const mixOff = dark && CELL_STYLE.offMix > 0;
+  const mixOff = dark && st.offMix > 0;
 
   const on = {} as Record<CellType, string>;
   const edge = {} as Record<CellType, string>;
@@ -163,15 +163,15 @@ function buildPalette(theme: ThemeName): Palette {
   const offLine = {} as Record<CellType, string>;
   for (const t of TYPES) {
     const n = CSS_NAME[t];
-    on[t]   = t === 'cable' ? CELL_STYLE.green : v(`--cell-${n}`);
+    on[t]   = t === 'cable' ? st.green : v(`--cell-${n}`);
     edge[t] = dark ? on[t] : v(`--cell-${n}-edge`);
-    const tone = dark && CELL_STYLE.offTone ? offToneColor(CELL_STYLE.offTone, t, on[t], bg) : null;
+    const tone = dark && st.offTone ? offToneColor(st.offTone, t, on[t], bg) : null;
     if (tone) {
       off[t]     = tone;
       offLine[t] = mixHex(tone, on[t], 0.3);
     } else if (mixOff) {
-      off[t]     = mixHex(bg, on[t], CELL_STYLE.offMix);
-      offLine[t] = mixHex(bg, on[t], Math.min(0.7, CELL_STYLE.offMix + 0.3));
+      off[t]     = mixHex(bg, on[t], st.offMix);
+      offLine[t] = mixHex(bg, on[t], Math.min(0.7, st.offMix + 0.3));
     } else {
       off[t]     = v(`--cell-${n}-off`);
       offLine[t] = v(`--cell-${n}-off-line`);
@@ -194,6 +194,12 @@ let cached: Palette | null = null;
 /** Aufgelöstes Theme steht immer als data-theme am <html> (siehe lib/theme.ts). */
 export function getCellPalette(): Palette {
   const theme: ThemeName = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
-  if (!cached || cached.theme !== theme) cached = buildPalette(theme);
+  if (!cached || cached.theme !== theme) cached = buildPalette(theme, CELL_STYLE);
   return cached;
+}
+
+/** Palette für einen beliebigen Stil im aktuellen Theme, ungecacht (Look-Vorschauen im Menü). */
+export function paletteFor(style: Readonly<CellStyle>): Palette {
+  const theme: ThemeName = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+  return buildPalette(theme, style);
 }

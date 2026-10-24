@@ -34,7 +34,8 @@ interface GridStore {
   stepCount: number;
   isRunning: boolean;
   hz:        number;
-  loopError: string | null;
+  /** Letzter Schritt hat eine kombinatorische Schleife gefunden (Text kommt aus i18n) */
+  loopError: boolean;
 
   undoStack: Grid[];
   redoStack: Grid[];
@@ -95,7 +96,7 @@ export const useGridStore = create<GridStore>((set, get) => ({
   stepCount: 0,
   isRunning: false,
   hz:        5,
-  loopError: null,
+  loopError: false,
   undoStack: [],
   redoStack: [],
 
@@ -138,14 +139,14 @@ export const useGridStore = create<GridStore>((set, get) => ({
   step: () => {
     try {
       const newGrid = simulationStep(get().grid);
-      set(s => ({ grid: newGrid, stepCount: s.stepCount + 1, loopError: null }));
+      set(s => ({ grid: newGrid, stepCount: s.stepCount + 1, loopError: false }));
     } catch (e) {
-      if (e instanceof SimLoopError) set({ isRunning: false, loopError: e.message });
+      if (e instanceof SimLoopError) set({ isRunning: false, loopError: true });
       else throw e;
     }
   },
 
-  setRunning: v  => set({ isRunning: v, ...(v && { loopError: null }) }),
+  setRunning: v  => set({ isRunning: v, ...(v && { loopError: false }) }),
   setHz:      v  => set({ hz: v }),
 
   clear: () => {
@@ -154,12 +155,12 @@ export const useGridStore = create<GridStore>((set, get) => ({
     // sich auf Daten, die es gleich nicht mehr gibt. Direkt auf idle statt
     // über cancelFloating/escape: ein Restore-Versuch wäre hier sinnlos.
     useSelectionStore.getState().resetToIdle();
-    set({ grid: new Map(), stepCount: 0, isRunning: false, loopError: null });
+    set({ grid: new Map(), stepCount: 0, isRunning: false, loopError: false });
   },
 
   loadGrid: g => {
     useSelectionStore.getState().resetToIdle();
-    set({ grid: g, stepCount: 0, isRunning: false, loopError: null });
+    set({ grid: g, stepCount: 0, isRunning: false, loopError: false });
   },
 
   replaceGridSilently: g => set({ grid: g }),

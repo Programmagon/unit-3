@@ -361,15 +361,29 @@ body {
   min-width: 32px;
 }
 
-/* ── Keyboard-Shortcut-Labels ───────────────────────────────── */
+/* ── Tastaturhinweise ───────────────────────────────────────────
+   <html data-keyhints="on|off"> setzt store/keymapStore.ts aus der Einstellung
+   (an / aus / automatisch: Maus oder erkannte Hardware-Tastatur).
+   In der Top-Bar zeigt eine kleine Marke unten rechts am Knopf das Kürzel
+   (data-key); sie braucht keine Breite und verschiebt keine Umbruch-Schwellen.
+   In der Auswahl-Leiste steht das Kürzel als Text hinter der Beschriftung. */
 .shortcut {
   opacity: 0.7;
   font-size: var(--fs-xs);
 }
-@media (hover: none) {
-  .shortcut {
-    display: none;
-  }
+html:not([data-keyhints='on']) .shortcut { display: none; }
+.top-bar .shortcut { display: none; }
+.btn[data-key] { position: relative; }
+html[data-keyhints='on'] .btn[data-key]::after {
+  content: attr(data-key);
+  position: absolute;
+  right: 3px;
+  bottom: 1px;
+  font-size: 9px;
+  line-height: 1.2;
+  letter-spacing: 0;
+  opacity: 0.75;
+  pointer-events: none;
 }
 
 /* ── Statusleiste ───────────────────────────────────────────── */
@@ -407,25 +421,31 @@ body {
 }
 
 /* ── Top-Bar: gestaffelte Verdichtung ────────────────────────────
-   Gemessen (Einzeilenbreite beider Reihen zusammen, inkl. Theme- und
-   Einstellungs-Knopf; der Zahnrad-Knopf hat jede Stufe um 50 px verbreitert):
-     volle Beschriftung + Kürzel + Hz   1959 px
-     ohne Kürzel                        1752 px
-     ohne Kürzel, ohne Hz               1644 px
-     nur Icons                           996 px
-   Jede Stufe greift ~10 px oberhalb ihrer Breite, damit nie umgebrochen wird.
-   Ändert sich ein Knopf, diese Zahlen neu messen.
+   Gemessen (Einzeilenbreite beider Reihen zusammen, inkl. Projekte-, Theme- und
+   Einstellungs-Knopf). Die Beschriftungen sind sprachabhängig, daher je Sprache
+   eigene Schwellen (<html lang> setzt i18n/index.ts):
+                                      Deutsch   Englisch
+     volle Beschriftung + Hz            1974      1722
+     ohne Hz                            1866      1614
+     nur Icons                          1053      1046
+   (Die Kürzel sind kleine Marken an den Knöpfen und kosten keine Breite.)
+   Jede Stufe greift ~2 px oberhalb ihrer Breite, damit nie umgebrochen wird.
+   Ändert sich ein Knopf oder ein Text, diese Zahlen neu messen.
    Der Hz-Regler verschwindet NIE, er wandert nur: Top-Bar (breit) ↔ Statusleiste. */
 .hz-control--status { display: none; }
-@media (max-width: 1961px) { .top-bar .shortcut { display: none; } }
-@media (max-width: 1754px) {
-  .hz-control--bar { display: none; }
-  .hz-control--status { display: flex; }
+@media (max-width: 1976px) {
+  :root:lang(de) .hz-control--bar { display: none; }
+  :root:lang(de) .hz-control--status { display: flex; }
 }
-@media (max-width: 1646px) { .top-bar .btn-label { display: none; } }
+@media (max-width: 1868px) { :root:lang(de) .top-bar .btn-label { display: none; } }
+@media (max-width: 1724px) {
+  :root:lang(en) .hz-control--bar { display: none; }
+  :root:lang(en) .hz-control--status { display: flex; }
+}
+@media (max-width: 1616px) { :root:lang(en) .top-bar .btn-label { display: none; } }
 @media (max-width: 1260px) { .hint-text { display: none; } }
-/* Ab 1006 px passt alles in eine Zeile: nicht umbrechen, sondern bei Bedarf seitlich scrollen */
-@media (min-width: 1006px) { .top-bar .scroll-row { flex-wrap: nowrap; } }
+/* Ab 1055 px passt alles in eine Zeile: nicht umbrechen, sondern bei Bedarf seitlich scrollen */
+@media (min-width: 1055px) { .top-bar .scroll-row { flex-wrap: nowrap; } }
 
 /* ── Mobile-Layout (< 600px) ────────────────────────────────── */
 @media (max-width: 599px) {
@@ -600,4 +620,107 @@ body {
     position: relative;
     padding-top: 10px;
   }
+}
+
+/* ── Looks (Einstellungen) ─────────────────────────────────────── */
+.look-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.look-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 6px;
+  text-align: left;
+  color: var(--text);
+  background: var(--bg-ui);
+  border: 1px solid var(--border-ui);
+  border-radius: var(--radius-ui);
+  cursor: pointer;
+  min-height: var(--touch-target);
+}
+.look-card:hover { border-color: var(--border-strong); }
+.look-card[aria-pressed='true'] {
+  border-color: var(--accent, currentColor);
+  box-shadow: 0 0 0 1px var(--accent, currentColor);
+}
+.look-card:focus-visible { outline: 2px solid var(--accent, currentColor); outline-offset: 2px; }
+.look-preview {
+  display: block;
+  max-width: 100%;
+  height: auto !important;
+  border-radius: 4px;
+}
+.look-name { font-size: var(--fs-sm); font-weight: var(--fw-medium); }
+.look-desc { font-size: var(--fs-xs); line-height: 1.35; color: var(--text-dim); }
+
+/* ── Projekte ──────────────────────────────────────────────────── */
+.proj-input {
+  width: 100%;
+  min-height: var(--touch-target);
+  padding: 0 10px;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-ui);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-ui);
+  user-select: text;
+}
+.proj-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.proj-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--border-ui);
+  border-radius: var(--radius-ui);
+}
+.proj-item[data-current='true'] { border-color: var(--accent, var(--border-strong)); }
+.proj-open {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: var(--touch-target);
+  padding: 2px 4px;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.proj-name { font-weight: var(--fw-medium); overflow-wrap: anywhere; }
+.proj-meta { font-size: var(--fs-xs); color: var(--text-dim); }
+.proj-actions { display: flex; gap: 4px; }
+.proj-actions .btn { flex: 1 1 0; }
+
+/* ── Tastenkürzel (Einstellungen) ──────────────────────────────── */
+.keys-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.keys-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 6px;
+}
+.keys-action { font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.keys-combo {
+  min-width: 64px;
+  padding: 4px 8px;
+  text-align: center;
+  font: inherit;
+  font-size: var(--fs-xs);
+  color: var(--text);
+  background: var(--bg-ui);
+  border: 1px solid var(--border-ui);
+  border-radius: var(--radius-ui);
+}
+.keys-combo[data-capturing='true'] { border-color: var(--accent); color: var(--accent); }
+.keys-reset { min-width: var(--touch-target); padding: 0; }
+@media (max-width: 599px) {
+  .keys-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .keys-row .btn { grid-column: auto; }
 }

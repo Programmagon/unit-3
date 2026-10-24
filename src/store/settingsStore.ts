@@ -1,27 +1,32 @@
 /**
- * Einstellungen des Menüs (SettingsMenu.tsx).
+ * Einstellungen (Menü, SettingsMenu.tsx).
  *
- * Gespeichert werden nur die Werte, die der Nutzer geändert hat ("overrides"),
- * nicht der ganze Satz. Der Rest ergibt sich aus den Standards — und die
- * kommen für die Darstellung aus CELL_STYLE in canvas/cellStyle.ts. So bleibt
- * das Testen dort (Werte ändern, neu laden) wirksam, und "Zurücksetzen" geht
- * auf genau diese Code-Werte zurück.
+ * Gespeichert werden nur die Werte, die der Nutzer geändert hat ("overrides").
+ * Der Rest ergibt sich aus den Standards. Die Darstellung kommt aus einem
+ * Look (canvas/looks.ts); Symbole, Leuchten, Raster und Aus-Farben sind
+ * Feinabstimmung auf dem gewählten Look. Ein Look-Wechsel verwirft diese
+ * Feinabstimmung, damit der Look so aussieht, wie er beschrieben ist (wichtig
+ * für Beta-Feedback: "Look C" ist dann immer dasselbe).
  *
  * Das Farbschema (Auto/Hell/Dunkel) hat einen eigenen Speicher, siehe
- * lib/theme.ts — hier nur der Menü-Zustand und die übrigen Einstellungen.
+ * lib/theme.ts. Projekte stehen in store/projectStore.ts.
+ *
+ * Diese Datei importiert i18n nicht (i18n liest die Sprache von hier).
  */
 import { create } from 'zustand';
-import {
-  CODE_DEFAULTS, OFF_TONE_NAMES, applyCellStyle, type CellStyle,
-} from '../canvas/cellStyle';
+import { OFF_TONE_NAMES, applyCellStyle } from '../canvas/cellStyle';
+import { LOOK_IDS, styleForLook, type LookId } from '../canvas/looks';
+import type { CellStyle } from '../canvas/cellStyle';
 
-export type CellShape = 'join' | 'seam' | 'single';
 export type StraightLine = 'auto' | 'off' | 'shift';
 export type TouchTap = 'power' | 'delete';
+export type LangPref = 'auto' | 'de' | 'en';
+export type KeyHints = 'auto' | 'on' | 'off';
+export type PanelId = 'settings' | 'projects';
 
 export interface Settings {
-  /** 'custom' = die Werte aus CELL_STYLE passen zu keiner Auswahl und bleiben unverändert */
-  cellShape: CellShape | 'custom';
+  look: LookId;
+  // Feinabstimmung (Standard: Wert des Looks)
   glyph: CellStyle['glyph'];
   glow: boolean;
   grid: boolean;
@@ -35,36 +40,17 @@ export interface Settings {
    * langes Drücken schaltet Force. Maus ist unabhängig davon.
    */
   touchTap: TouchTap;
+  language: LangPref;
+  /** Kürzel an den Knöpfen zeigen: automatisch (Maus oder erkannte Hardware-Tastatur), immer, nie */
+  keyHints: KeyHints;
+  /** Arbeitsstand automatisch im Browser sichern und beim Start wiederherstellen */
+  autosave: boolean;
 }
 
-/** Vom Nutzer geänderte Werte. Fehlt ein Schlüssel, gilt der Standard. */
-export type Overrides = Partial<Omit<Settings, 'cellShape'>> & { cellShape?: CellShape };
+export type Overrides = Partial<Settings>;
 
-/** Die drei wählbaren Zell-Stile (Verbindung, Abstand, Rundung zusammen) */
-export const CELL_SHAPES: Record<CellShape, Pick<CellStyle, 'connect' | 'pad' | 'round' | 'roundMode' | 'seamW'>> = {
-  join:   { connect: 'join', pad: 0,   round: 0.15, roundMode: 'outer', seamW: 0.5 },
-  seam:   { connect: 'seam', pad: 0,   round: 0.12, roundMode: 'outer', seamW: 1 },
-  single: { connect: 'off',  pad: 0.1, round: 0.2,  roundMode: 'cell',  seamW: 0.5 },
-};
-
-function shapeOf(s: Readonly<CellStyle>): CellShape | 'custom' {
-  for (const k of Object.keys(CELL_SHAPES) as CellShape[]) {
-    const p = CELL_SHAPES[k];
-    if (p.connect === s.connect && p.pad === s.pad && p.round === s.round
-      && p.roundMode === s.roundMode && p.seamW === s.seamW) return k;
-  }
-  return 'custom';
-}
-
-export const DEFAULTS: Readonly<Settings> = {
-  cellShape:    shapeOf(CODE_DEFAULTS),
-  glyph:        CODE_DEFAULTS.glyph,
-  glow:         CODE_DEFAULTS.glow,
-  grid:         CODE_DEFAULTS.grid,
-  offTone:      CODE_DEFAULTS.offTone,
-  straightLine: 'auto',
-  touchTap:     'power',
-};
+/** Schlüssel der Feinabstimmung — hängen vom Look ab und werden bei Look-Wechsel verworfen. */
+export const TWEAK_KEYS = ['glyph', 'glow', 'grid', 'offTone'] as const satisfies readonly (keyof Settings)[];
 
 // ── Speichern / Laden ────────────────────────────────────────────────
 const KEY = 'u3.settings';
@@ -78,8 +64,8 @@ function sanitize(raw: unknown): Overrides {
   const o: Overrides = {};
   if (typeof raw !== 'object' || raw === null) return o;
   const r = raw as Record<string, unknown>;
-  const shape = pick(r.cellShape, Object.keys(CELL_SHAPES) as CellShape[]);
-  if (shape !== undefined) o.cellShape = shape;
+  const look = pick(r.look, LOOK_IDS);
+  if (look !== undefined) o.look = look;
   const glyph = pick(r.glyph, ['none', 'sel', 'line', 'dot'] as const);
   if (glyph !== undefined) o.glyph = glyph;
   if (typeof r.glow === 'boolean') o.glow = r.glow;
@@ -91,6 +77,11 @@ function sanitize(raw: unknown): Overrides {
   if (straight !== undefined) o.straightLine = straight;
   const tap = pick(r.touchTap, ['power', 'delete'] as const);
   if (tap !== undefined) o.touchTap = tap;
+  const lang = pick(r.language, ['auto', 'de', 'en'] as const);
+  if (lang !== undefined) o.language = lang;
+  const hints = pick(r.keyHints, ['auto', 'on', 'off'] as const);
+  if (hints !== undefined) o.keyHints = hints;
+  if (typeof r.autosave === 'boolean') o.autosave = r.autosave;
   return o;
 }
 
@@ -108,8 +99,25 @@ function save(o: Overrides): void {
   } catch { /* Speicher gesperrt: Einstellungen gelten nur für diese Sitzung */ }
 }
 
+/** Standardwerte, abhängig vom gewählten Look. */
+function defaultsFor(look: LookId): Settings {
+  const st = styleForLook(look);
+  return {
+    look,
+    glyph: st.glyph,
+    glow: st.glow,
+    grid: st.grid,
+    offTone: st.offTone,
+    straightLine: 'auto',
+    touchTap: 'power',
+    language: 'auto',
+    keyHints: 'auto',
+    autosave: true,
+  };
+}
+
 function compute(o: Overrides): Settings {
-  const s: Settings = { ...DEFAULTS };
+  const s = defaultsFor(o.look ?? 'standard');
   for (const k of Object.keys(o) as (keyof Overrides)[]) {
     const v = o[k];
     if (v !== undefined) (s as unknown as Record<string, unknown>)[k] = v;
@@ -117,49 +125,67 @@ function compute(o: Overrides): Settings {
   return s;
 }
 
+/** Entfernt Überschreibungen, die dem Standard entsprechen (hält den Speicher klein und "geändert"-Anzeigen ehrlich). */
+function normalize(o: Overrides): Overrides {
+  const out: Overrides = { ...o };
+  if (out.look === 'standard') delete out.look;
+  const def = defaultsFor(out.look ?? 'standard');
+  for (const k of Object.keys(out) as (keyof Overrides)[]) {
+    if (k !== 'look' && out[k] === def[k]) delete out[k];
+  }
+  return out;
+}
+
 // ── Store ────────────────────────────────────────────────────────────
 interface SettingsState {
   overrides: Overrides;
   /** Wirksame Werte (Standards + Überschreibungen) */
   settings: Settings;
-  /** Menü offen? Nicht gespeichert. */
-  menuOpen: boolean;
-  setMenuOpen: (open: boolean) => void;
+  /** Welches Seitenpanel offen ist. Nicht gespeichert. */
+  panel: PanelId | null;
+  openPanel: (p: PanelId | null) => void;
   setSetting: <K extends keyof Overrides>(key: K, value: Overrides[K]) => void;
+  /** Wählt einen Look und verwirft die Feinabstimmung. */
+  setLook: (look: LookId) => void;
   /** Ohne Argument: alles; sonst nur diese Schlüssel auf den Standard */
   resetSettings: (keys?: (keyof Overrides)[]) => void;
 }
 
 export const useSettingsStore = create<SettingsState>(set => {
-  const overrides = load();
+  const overrides = normalize(load());
   return {
     overrides,
     settings: compute(overrides),
-    menuOpen: false,
-    setMenuOpen: open => set({ menuOpen: open }),
+    panel: null,
+    openPanel: p => set({ panel: p }),
     setSetting: (key, value) => set(s => {
-      const o: Overrides = { ...s.overrides, [key]: value } as Overrides;
-      if (value === (DEFAULTS as Record<string, unknown>)[key]) delete o[key];
+      const o = normalize({ ...s.overrides, [key]: value } as Overrides);
       return { overrides: o, settings: compute(o) };
+    }),
+    setLook: look => set(s => {
+      const o: Overrides = { ...s.overrides, look };
+      for (const k of TWEAK_KEYS) delete o[k];
+      const n = normalize(o);
+      return { overrides: n, settings: compute(n) };
     }),
     resetSettings: keys => set(s => {
       const o: Overrides = keys ? { ...s.overrides } : {};
       if (keys) for (const k of keys) delete o[k];
-      return { overrides: o, settings: compute(o) };
+      // Look zurücksetzen verwirft auch die Feinabstimmung
+      if (!keys || keys.includes('look')) for (const k of TWEAK_KEYS) delete o[k];
+      const n = normalize(o);
+      return { overrides: n, settings: compute(n) };
     }),
   };
 });
 
-/** Schreibt die Darstellungs-Einstellungen in CELL_STYLE (immer ausgehend von den Code-Werten). */
+/** Vollständiger Zellstil der aktuellen Einstellungen (Look + Feinabstimmung). */
+export function styleFromSettings(s: Settings): CellStyle {
+  return { ...styleForLook(s.look), glyph: s.glyph, glow: s.glow, grid: s.grid, offTone: s.offTone };
+}
+
 function applyToCanvas(s: Settings): void {
-  applyCellStyle({
-    ...CODE_DEFAULTS,
-    ...(s.cellShape !== 'custom' ? CELL_SHAPES[s.cellShape] : {}),
-    glyph: s.glyph,
-    glow: s.glow,
-    grid: s.grid,
-    offTone: s.offTone,
-  });
+  applyCellStyle(styleFromSettings(s));
 }
 
 applyToCanvas(useSettingsStore.getState().settings);

@@ -2,7 +2,7 @@ import type { Grid, CellType } from '../simulation/types';
 import { fromKey, key } from '../simulation/grid';
 import { type Camera, worldToScreen } from './coordinates';
 import type { SelectionState } from './selection';
-import { CELL_STYLE, getCellPalette } from './cellStyle';
+import { CELL_STYLE, getCellPalette, paletteFor, type CellStyle, type Palette } from './cellStyle';
 
 export type { Camera };
 
@@ -77,10 +77,11 @@ function drawCells(
   ctx: CanvasRenderingContext2D,
   cells: DrawableCell[], typeAt: TypeAt, cam: Camera,
   viewW: number, viewH: number,
+  /** Stil und Palette; Standard ist der laufende Canvas, die Look-Vorschau übergibt eigene. */
+  s: Readonly<CellStyle> = CELL_STYLE,
+  pal: Palette = getCellPalette(),
 ): void {
   const has = (x: number, y: number) => typeAt(x, y) !== undefined;
-  const s   = CELL_STYLE;
-  const pal = getCellPalette();
   const z   = cam.zoom;
   const dpr = ctx.getTransform().a || 1;
   const sn  = (v: number) => Math.round(v * dpr) / dpr;
@@ -321,4 +322,29 @@ export function renderSelectionOverlay(
     drawCells(ctx, cells, (x, y) => occupied.get(key(x, y)), cam, Infinity, Infinity);
     strokeRectAt(ctx, cam, rect.x, rect.y, rect.width, rect.height, false);
   }
+}
+
+
+/** Kleine Beispielszene für die Look-Vorschau im Menü: 5 × 3 Zellen, ein und aus gemischt. */
+const PREVIEW_SCENE: DrawableCell[] = (() => {
+  const rows: [CellType, boolean][][] = [
+    [['cable', true],  ['cable', true],  ['cable', true],  ['inverter', true],  ['delay', true]],
+    [['cable', false], ['cable', false], ['cable', false], ['inverter', false], ['delay', false]],
+    [['cable', true],  ['inverter', false], ['delay', true], ['delay', false],  ['cable', false]],
+  ];
+  return rows.flatMap((r, y) => r.map(([type, state], x) => ({ x, y, type, state })));
+})();
+export const PREVIEW_COLS = 5;
+export const PREVIEW_ROWS = 3;
+
+/** Zeichnet die Beispielszene mit einem beliebigen Stil. `zoom` = Zellgröße in px. */
+export function renderLookPreview(
+  ctx: CanvasRenderingContext2D, style: Readonly<CellStyle>, zoom: number,
+): void {
+  const pal = paletteFor(style);
+  const w = PREVIEW_COLS * zoom, h = PREVIEW_ROWS * zoom;
+  ctx.fillStyle = pal.bg;
+  ctx.fillRect(0, 0, w, h);
+  const at: TypeAt = (x, y) => PREVIEW_SCENE.find(c => c.x === x && c.y === y)?.type;
+  drawCells(ctx, PREVIEW_SCENE, at, { x: 0, y: 0, zoom }, w, h, style, pal);
 }

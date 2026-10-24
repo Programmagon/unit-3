@@ -3,6 +3,9 @@ import { useSelectionStore } from "../store/selectionStore";
 import type { Tool } from "../canvas/input";
 import type { ComponentType } from "react";
 import { Logo } from "./Logo";
+import { useT, type TKey } from "../i18n";
+import { useKeys } from "../lib/useKeys";
+import type { ActionId } from "../lib/keymap";
 import {
   IconCable,
   IconInverter,
@@ -14,15 +17,15 @@ import {
 const TOOLS: {
   id: Tool;
   Icon: ComponentType;
-  label: string;
-  shortcut: string;
+  label: TKey;
+  action: ActionId;
   cls: string;
 }[] = [
-  { id: "cable",    Icon: IconCable,    label: "Kabel",      shortcut: "1", cls: "btn--tool btn--cable" },
-  { id: "inverter", Icon: IconInverter, label: "Umkehrer",   shortcut: "2", cls: "btn--tool btn--inv" },
-  { id: "delay",    Icon: IconDelay,    label: "Verzögerer", shortcut: "3", cls: "btn--tool btn--delay" },
-  { id: "delete",   Icon: IconErase,    label: "Löschen",    shortcut: "E", cls: "btn--danger" },
-  { id: "select",   Icon: IconSelect,   label: "Auswählen",  shortcut: "S", cls: "" },
+  { id: "cable",    Icon: IconCable,    label: "tool.cable",      action: "toolCable", cls: "btn--tool btn--cable" },
+  { id: "inverter", Icon: IconInverter, label: "tool.inverter",   action: "toolInverter", cls: "btn--tool btn--inv" },
+  { id: "delay",    Icon: IconDelay,    label: "tool.delay", action: "toolDelay", cls: "btn--tool btn--delay" },
+  { id: "delete",   Icon: IconErase,    label: "tool.delete",    action: "toolErase", cls: "btn--danger" },
+  { id: "select",   Icon: IconSelect,   label: "tool.select",  action: "toolSelect", cls: "" },
 ];
 
 /**
@@ -31,6 +34,8 @@ const TOOLS: {
  * die Werkzeug-Buttons selbst, keine versteckte Abhängigkeit zu SimBar mehr.
  */
 export function Toolbar() {
+  const t = useT();
+  const keys = useKeys();
   const tool = useUIStore((s) => s.tool);
   const setTool = useUIStore((s) => s.setTool);
   const commitFloating = useSelectionStore((s) => s.commitFloating);
@@ -51,17 +56,18 @@ export function Toolbar() {
     >
       <Logo />
 
-      {TOOLS.map((t) => (
+      {TOOLS.map((tl) => (
         <button
-          key={t.id}
-          className={`btn ${t.cls}`.trim()}
-          aria-pressed={tool === t.id}
-          aria-label={t.label}
-          title={`${t.label} [${t.shortcut}]`}
+          key={tl.id}
+          className={`btn ${tl.cls}`.trim()}
+          aria-pressed={tool === tl.id}
+          aria-label={t(tl.label)}
+          title={keys.titled(t(tl.label), tl.action)}
+          data-key={keys.badge(tl.action)}
           onClick={() => {
             // Erneuter Klick auf das bereits aktive Werkzeug → deselektieren
             // (kein Werkzeug aktiv, alles pannt — siehe canvas/input.ts shouldPan).
-            const nextTool = tool === t.id ? null : t.id;
+            const nextTool = tool === tl.id ? null : tl.id;
             // Gilt für JEDEN Wechsel WEG von "select" — auch das reine
             // Deselektieren (nextTool=null). Eine schwebende Selektion wird
             // dabei committed (State-Machine-Regel: Werkzeugwechsel bestätigt
@@ -78,9 +84,8 @@ export function Toolbar() {
             setTool(nextTool);
           }}
         >
-          <t.Icon />
-          <span className="btn-label"> {t.label}</span>
-          <span className="shortcut"> [{t.shortcut}]</span>
+          <tl.Icon />
+          <span className="btn-label"> {t(tl.label)}</span>
         </button>
       ))}
     </div>

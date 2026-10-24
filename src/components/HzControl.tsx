@@ -1,4 +1,5 @@
 import { useGridStore } from '../store/gridStore';
+import { useT } from '../i18n';
 
 /**
  * Geschwindigkeits-Regler (Hz). Wird an ZWEI Stellen gerendert (SimBar und
@@ -6,6 +7,7 @@ import { useGridStore } from '../store/gridStore';
  * zeigt immer genau eine davon — so ist der Wert auf jedem Gerät sichtbar.
  */
 export function HzControl({ where }: { where: 'bar' | 'status' }) {
+  const t    = useT();
   const hz   = useGridStore(s => s.hz);
   const setHz = useGridStore(s => s.setHz);
   return (
@@ -13,7 +15,7 @@ export function HzControl({ where }: { where: 'bar' | 'status' }) {
       <input
         type="range"
         min={1} max={30} value={hz}
-        aria-label="Geschwindigkeit in Hertz"
+        aria-label={t('bar.speed')}
         onChange={e => setHz(+e.target.value)}
       />
       <span className="hz-value">{hz} Hz</span>
