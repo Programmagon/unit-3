@@ -4,7 +4,6 @@ import { key } from "../simulation/grid";
 import {
   getCellAt,
   clientToCanvas,
-  zoomAtPoint,
   type Camera,
 } from "./coordinates";
 
@@ -112,9 +111,30 @@ interface PointerInfo {
   lastClientY: number;
 }
 
+/**
+ * Eingabe-Einstellungen aus dem Menü (store/settingsStore.ts). Werden bei
+ * JEDEM Ereignis neu über getOptions gelesen — eine Änderung im Menü wirkt
+ * also sofort, ohne den Controller neu zu bauen.
+ */
+export interface InputOptions {
+  /** Gerade Linie beim Ziehen: automatisch, nie, oder nur mit gehaltener Umschalttaste */
+  straightLine: "auto" | "off" | "shift";
+  /** Touch/Stift: Tippen auf gleichen Typ = Force umschalten (power) oder löschen (delete) */
+  touchTap: "power" | "delete";
+}
+const DEFAULT_OPTIONS: InputOptions = { straightLine: "auto", touchTap: "power" };
+
 // ─── Callbacks ────────────────────────────────────────────────────────
 export interface PointerCallbacks {
-  onPlace: (cx: number, cy: number, isDrag: boolean) => void;
+  /**
+   * `tapPointerType` ist nur bei einem echten Tippen gesetzt (Loslassen ohne
+   * Bewegung) und nennt den Pointer-Typ ("mouse" | "touch" | "pen") — der
+   * Empfänger braucht ihn für die Touch-Einstellung "Tippen = Löschen". Beim
+   * Ziehen und bei der Ankerzelle eines Drags bleibt er leer.
+   */
+  onPlace: (cx: number, cy: number, isDrag: boolean, tapPointerType?: string) => void;
+  /** Long-Press (Touch/Stift) mit Einstellung "Tippen = Löschen": Force (⊕) der Zelle umschalten */
+  onToggleForced?: (cx: number, cy: number) => void;
   onDelete: (cx: number, cy: number) => void;
   /** Delta in Canvas-Pixel — Empfänger mutiert Camera direkt */
   onPan: (dx: number, dy: number) => void;
@@ -180,6 +200,7 @@ export class PointerController {
   private readonly getCamera: () => Camera;
   private readonly getTool: () => Tool | null;
   private readonly getSelectionHit: (cx: number, cy: number) => boolean;
+  private readonly getOptions: () => InputOptions;
 
   // Einzel-Pointer-Zustand
   private isPanning = false;
@@ -190,6 +211,12 @@ export class PointerController {
   /** Letzte platzierte Zelle — Startpunkt für Bresenham-Interpolation */
   private lastCellPos: [number, number] | null = null;
   private longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Long-Press hat bereits eine Aktion ausgelöst (Force umgeschaltet) und
+   * keinen Drag gestartet — das Loslassen darf dann nicht zusätzlich als Tap
+   * zählen, und Bewegung danach platziert nichts.
+   */
+  private tapConsumed = false;
 
   // ─── Selektions-Zustand ───────────────────────────────────────────
   // Eigene Felder, KEINE Wiederverwendung von isDragging/anchorCell/
@@ -227,13 +254,16 @@ export class PointerController {
      * zurückgibt. Rückgabewert true → Verschiebe-Modus, false → neue
      * Rechteckauswahl beginnt.
      */
-    getSelectionHit: (cx: number, cy: number) => boolean
+    getSelectionHit: (cx: number, cy: number) => boolean,
+    /** Eingabe-Einstellungen; ohne Angabe gelten die Standards (automatisch / Powern). */
+    getOptions?: () => InputOptions
   ) {
     this.canvas = canvas;
     this.cb = callbacks;
     this.getCamera = getCamera;
     this.getTool = getTool;
     this.getSelectionHit = getSelectionHit;
+    this.getOptions = getOptions ?? (() => DEFAULT_OPTIONS);
   }
 
   // ─── Hilfsfunktionen ────────────────────────────────────────────────
@@ -277,6 +307,7 @@ export class PointerController {
     this.dragAxis = null;
     this.anchorCell = null;
     this.lastCellPos = null;
+    this.tapConsumed = false;
     this.cancelLongPress();
   }
 
@@ -303,7 +334,7 @@ export class PointerController {
    * Berechnet Zielzelle, wendet Achslock an (nur beim Platzieren),
    * und interpoliert mit Bresenham zwischen letzter und aktueller Zelle.
    */
-  private applyDragAt(clientX: number, clientY: number) {
+  private applyDragAt(clientX: number, clientY: number, shift: boolean) {
     let [cx, cy] = this.cellAt(clientX, clientY);
 
     // Achslock — NUR beim Platzieren, nicht beim Löschen
@@ -314,20 +345,29 @@ export class PointerController {
     // trotzdem gestraightet.
     const deleting = this.isDeleting || this.getTool() === "delete";
     if (!deleting && this.anchorCell !== null) {
-      if (this.dragAxis === null) {
-        const adx = Math.abs(cx - this.anchorCell[0]);
-        const ady = Math.abs(cy - this.anchorCell[1]);
-        const dominant = Math.max(adx, ady);
-        // Achse erst sperren wenn Bewegung eindeutig genug ist:
-        // min. AXIS_MIN_CELLS Abstand UND klare Dominanz (AXIS_DOMINANCE_RATIO)
-        if (dominant >= AXIS_MIN_CELLS) {
-          if (adx > ady * AXIS_DOMINANCE_RATIO) this.dragAxis = "x";
-          else if (ady > adx * AXIS_DOMINANCE_RATIO) this.dragAxis = "y";
-          // Diagonal → Achse noch offen, nächste Bewegung entscheidet
+      // Einstellung "Gerade Linie": automatisch, nie, oder nur solange die
+      // Umschalttaste gehalten wird. Ist der Lock nicht erlaubt, wird auch eine
+      // schon gesperrte Achse wieder freigegeben (Umschalttaste losgelassen).
+      const mode = this.getOptions().straightLine;
+      const lockAllowed = mode === "auto" || (mode === "shift" && shift);
+      if (!lockAllowed) {
+        this.dragAxis = null;
+      } else {
+        if (this.dragAxis === null) {
+          const adx = Math.abs(cx - this.anchorCell[0]);
+          const ady = Math.abs(cy - this.anchorCell[1]);
+          const dominant = Math.max(adx, ady);
+          // Achse erst sperren wenn Bewegung eindeutig genug ist:
+          // min. AXIS_MIN_CELLS Abstand UND klare Dominanz (AXIS_DOMINANCE_RATIO)
+          if (dominant >= AXIS_MIN_CELLS) {
+            if (adx > ady * AXIS_DOMINANCE_RATIO) this.dragAxis = "x";
+            else if (ady > adx * AXIS_DOMINANCE_RATIO) this.dragAxis = "y";
+            // Diagonal → Achse noch offen, nächste Bewegung entscheidet
+          }
         }
+        if (this.dragAxis === "x") cy = this.anchorCell[1]; // horizontal → Y klemmen
+        if (this.dragAxis === "y") cx = this.anchorCell[0]; // vertikal  → X klemmen
       }
-      if (this.dragAxis === "x") cy = this.anchorCell[1]; // horizontal → Y klemmen
-      if (this.dragAxis === "y") cx = this.anchorCell[0]; // vertikal  → X klemmen
     }
 
     // Bresenham-Interpolation: alle Zellen zwischen lastCellPos und (cx,cy)
@@ -452,12 +492,22 @@ export class PointerController {
       return;
     }
 
-    // Long-Press → Löschen auf Touch/Stift
+    // Long-Press auf Touch/Stift: standardmäßig Löschen (Drag möglich). Mit der
+    // Einstellung "Tippen = Löschen" ist es umgekehrt: Tippen löscht (siehe
+    // Canvas.tsx onPlace), Long-Press schaltet Force (⊕) der Zelle um. Das
+    // Löschen-Werkzeug bleibt davon unberührt — dort gibt es nichts umzutauschen.
     if (e.pointerType !== "mouse") {
       const [cx, cy] = this.cellAt(e.clientX, e.clientY);
+      const swap =
+        this.getOptions().touchTap === "delete" && this.getTool() !== "delete";
       this.longPressTimer = setTimeout(() => {
         if (!this.isDragging) {
           this.cancelLongPress();
+          if (swap) {
+            this.tapConsumed = true;
+            this.cb.onToggleForced?.(cx, cy);
+            return;
+          }
           this.isDeleting = true;
           this.isDragging = true;
           this.anchorCell = [cx, cy];
@@ -517,9 +567,13 @@ export class PointerController {
       return;
     }
 
+    // Long-Press hat schon gehandelt (Force umgeschaltet): bis zum Loslassen
+    // nichts mehr tun — weder Drag starten noch Zellen platzieren.
+    if (this.tapConsumed) return;
+
     // Löschen-Drag
     if (this.isDeleting) {
-      this.applyDragAt(e.clientX, e.clientY);
+      this.applyDragAt(e.clientX, e.clientY, e.shiftKey);
       return;
     }
 
@@ -540,7 +594,7 @@ export class PointerController {
         // Ankerzelle wie Tap behandeln (Toggle erlaubt)
         if (this.getTool() !== "delete") this.cb.onPlace(cx, cy, false);
       }
-      this.applyDragAt(e.clientX, e.clientY);
+      this.applyDragAt(e.clientX, e.clientY, e.shiftKey);
     }
   }
 
@@ -588,12 +642,13 @@ export class PointerController {
         !this.isPanning &&
         !this.isDragging &&
         !this.isDeleting &&
+        !this.tapConsumed &&
         !this.wasPinching;
       if (wasTap && this.pointers.size === 0) {
         const [cx, cy] = this.cellAt(e.clientX, e.clientY);
         if (e.pointerType === "mouse" && e.button === 2)
           this.cb.onDelete(cx, cy);
-        else this.cb.onPlace(cx, cy, false);
+        else this.cb.onPlace(cx, cy, false, e.pointerType);
       }
       if (this.pointers.size === 0) {
         if (this.isDragging) this.cb.onDragEnd?.();

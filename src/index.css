@@ -1,10 +1,18 @@
 /* ═══════════════════════════════════════════════════════════════
-   Unit-3  —  Design Tokens & Layout
+   Unit-3  —  Layout & Komponenten
 ═══════════════════════════════════════════════════════════════ */
 
 /* ── Reset ──────────────────────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body { overflow: hidden; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+body {
+  overflow: hidden;
+}
 /*
   100vh zählt auf Mobile (Safari/Chrome) die (ggf. eingeblendete) Adressleiste
   mit — die tatsächlich sichtbare Höhe ist kleiner. Das drückte den untersten
@@ -13,26 +21,12 @@ body { overflow: hidden; }
   100dvh berücksichtigt die tatsächlich sichtbare Höhe. Fallback bleibt 100vh
   für Browser ohne dvh-Unterstützung (Cascade: unbekannte Werte werden ignoriert).
 */
-#root { height: 100vh; height: 100dvh; }
-
-/* ── Design Tokens ──────────────────────────────────────────── */
-:root {
-  --bg-app:      #0b0b1e;
-  --bg-ui:       #0f0f2a;
-  --border-ui:   #1c1c48;
-  --accent:      #4455ee;
-  --cell-cable:  #00ff88;
-  --cell-inv:    #ff9900;
-  --cell-delay:  #bb44ff;
-  --cell-delete: #ff4455;
-  --sim-blue:    #4488cc;
-  --sim-green:   #00aa55;
-  --sim-red:     #cc3333;
-  --text-dim:    #334466;
-  --text-muted:  #445566;
-  --font:        'Courier New', monospace;
-  --touch-target: 44px;
+#root {
+  height: 100vh;
+  height: 100dvh;
 }
+
+/* Farben, Schrift- und Größen-Tokens: siehe theme.css */
 
 /* ── App-Layout (CSS Grid) ──────────────────────────────────── */
 /*
@@ -56,6 +50,8 @@ body { overflow: hidden; }
   height: 100dvh; /* s. Kommentar bei #root */
   background: var(--bg-app);
   font-family: var(--font);
+  font-weight: var(--fw-text);
+  color: var(--text);
   user-select: none;
   overflow: hidden;
   /*
@@ -65,12 +61,18 @@ body { overflow: hidden; }
     Braucht viewport-fit=cover in index.html, sonst liefert env() immer 0.
   */
   padding: env(safe-area-inset-top) env(safe-area-inset-right)
-           env(safe-area-inset-bottom) env(safe-area-inset-left);
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
-.top-bar     { grid-area: toolbar; }
-.canvas-area { grid-area: canvas;  }
-.status-bar  { grid-area: status;  }
+.top-bar {
+  grid-area: toolbar;
+}
+.canvas-area {
+  grid-area: canvas;
+}
+.status-bar {
+  grid-area: status;
+}
 
 /* ── Scrollbare Button-Reihen (Toolbar/SimBar) ──────────────────
    Sicherheitsnetz gegen horizontales Abschneiden: falls eine Button-Reihe
@@ -80,9 +82,11 @@ body { overflow: hidden; }
 .scroll-row {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;   /* Firefox */
+  scrollbar-width: none; /* Firefox */
 }
-.scroll-row::-webkit-scrollbar { display: none; } /* Chrome/Safari */
+.scroll-row::-webkit-scrollbar {
+  display: none;
+} /* Chrome/Safari */
 
 /* ── top-bar ────────────────────────────────────────────────── */
 .top-bar {
@@ -121,12 +125,13 @@ body { overflow: hidden; }
   position: absolute;
   top: 8px;
   left: 10px;
-  background: rgba(15, 15, 42, 0.75);
+  background: color-mix(in srgb, var(--bg-ui) 80%, transparent);
   border: 1px solid var(--border-ui);
-  border-radius: 4px;
+  border-radius: var(--radius-ui);
   padding: 2px 8px;
-  font-size: 10px;
-  color: var(--sim-blue);
+  font-size: var(--fs-xs);
+  color: var(--text);
+  font-weight: var(--fw-medium);
   pointer-events: none;
   z-index: 10;
 }
@@ -150,36 +155,12 @@ body { overflow: hidden; }
   max-width: calc(100% - 24px);
   gap: 4px;
   padding: 4px;
-  background: rgba(15, 15, 42, 0.9);
-  border: 1px solid var(--border-ui);
-  border-radius: 6px;
+  background: var(--bg-ui);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-float);
   z-index: 10;
 }
-.sel-action-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  height: var(--touch-target);
-  min-width: var(--touch-target);
-  padding: 0 10px;
-  border-radius: 4px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--sim-blue);
-  font-size: 15px;
-  font-family: var(--font);
-  white-space: nowrap;
-  cursor: pointer;
-}
-.sel-action-btn:hover { background: rgba(68,136,204,0.15); }
-.sel-action-danger { color: var(--cell-delete); }
-.sel-action-danger:hover { background: rgba(255,68,85,0.15); }
-/* Bestätigen-Button für eine schwebende Selektion — gleiche Farbe wie der
-   Play-Button in SimBar.tsx (Grün = "diese Aktion abschließen/bestätigen"). */
-.sel-action-confirm { color: var(--sim-green); }
-.sel-action-confirm:hover { background: rgba(0,170,85,0.15); }
-
 /* Trenner zwischen den Aktionsgruppen (Zwischenablage / Transformieren /
    Exportieren / Löschen) — gleiche Optik wie die Trenner in SimBar.tsx. */
 .sel-action-divider {
@@ -196,50 +177,214 @@ body { overflow: hidden; }
    die Labels — anders als bei Toolbar/SimBar (1260px-Grenze) hat diese
    Leiste den ganzen Canvas als Platz, nicht die schmale Top-Bar. */
 @media (max-width: 380px) {
-  .sel-action-btn .btn-label { display: none; }
+  .selection-actions .btn .btn-label {
+    display: none;
+  }
 }
 
-/* ── Toolbar-Buttons ────────────────────────────────────────── */
-.tool-btn {
+/* ── Logo ───────────────────────────────────────────────────────
+   Reihenfolge einhalten: Varianten stehen NACH .logo.
+   34 px + 2 × 5 px Rand = 44 px = --touch-target. */
+.logo {
+  display: block;
+  height: 34px;
+  width: auto;
+  margin: 5px 8px 5px 0;
+  flex-shrink: 0;
+}
+.logo--for-light {
+  display: none;
+}
+:root[data-theme="light"] .logo--for-light {
+  display: block;
+}
+:root[data-theme="light"] .logo--for-dark {
+  display: none;
+}
+
+/* ── Button-System ──────────────────────────────────────────────
+   Zwei Variablen pro Button: --tone (Fläche) und --ink (Schrift/Icon),
+   gesetzt über Modifier-Klassen — keine Inline-Farben. */
+.btn {
+  --tone: var(--tone-action);
+  --ink: var(--ink-action);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 6px;
   height: var(--touch-target);
   min-width: var(--touch-target);
   padding: 0 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-family: var(--font);
-  font-size: 12px;
-  border: 1px solid transparent;
-  outline: none;
-  white-space: nowrap;
-  transition: background 0.1s, color 0.1s;
+  border: 1px solid color-mix(in srgb, var(--ink) 40%, transparent);
+  border-radius: var(--radius-ui);
   background: transparent;
-}
-
-/* ── Sim-Buttons ────────────────────────────────────────────── */
-.sim-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  height: var(--touch-target);
-  padding: 0 14px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-family: var(--font);
-  font-size: 12px;
-  outline: none;
+  color: var(--ink);
+  font: var(--fw-text) var(--fs-sm) var(--font);
   white-space: nowrap;
-  border: 1px solid transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent; /* kein grauer iOS/Android-Tap-Kasten */
+  touch-action: manipulation;               /* kein Doppeltipp-Zoom, kein 300-ms-Delay */
+  transition: background-color 0.12s, border-color 0.12s, transform 0.06s;
 }
-.sim-btn:disabled { cursor: default; opacity: 0.38; }
+.btn--confirm {
+  --tone: var(--tone-confirm);
+  --ink: var(--ink-confirm);
+}
+.btn--danger {
+  --tone: var(--tone-danger);
+  --ink: var(--ink-danger);
+}
+.btn--cable {
+  --tone: var(--tone-cable);
+  --ink: var(--ink-cable);
+}
+.btn--inv {
+  --tone: var(--tone-inv);
+  --ink: var(--ink-inv);
+}
+.btn--delay {
+  --tone: var(--tone-delay);
+  --ink: var(--ink-delay);
+}
 
-/* ── Keyboard-Shortcut-Labels ───────────────────────────────── */
-.shortcut { opacity: 0.38; font-size: 10px; }
-@media (hover: none) { .shortcut { display: none; } }
+/* Hover NUR für echte Zeiger (Maus/Trackpad). Auf Touch bleibt :hover nach dem
+   Tippen „kleben" — das wirkte wie ein dauerhaft gedrückter Knopf. */
+@media (hover: hover) and (pointer: fine) {
+  /* Umriss-Knöpfe: Fläche 22 % Tonfarbe über der Leiste + kräftigerer Rand */
+  .btn:hover:not(:disabled):not([aria-pressed="true"]):not(.btn--solid) {
+    background: color-mix(in srgb, var(--tone) 22%, var(--bg-ui));
+    border-color: color-mix(in srgb, var(--ink) 80%, transparent);
+  }
+  /* Gefüllte Knöpfe (aktives Werkzeug, Play/Pause): heller statt dunkler.
+     Die Füllung bleibt erhalten — der frühere Hover-Stil überschrieb sie
+     mit 10 % Transparenz, dadurch stand dunkle Schrift auf dunklem Grund. */
+  .btn[aria-pressed="true"]:hover:not(:disabled),
+  .btn--solid:hover:not(:disabled) {
+    background-image: linear-gradient(rgb(255 255 255 / 0.22), rgb(255 255 255 / 0.22));
+  }
+}
+/* Kurzes Tipp-/Klick-Feedback; endet sofort beim Loslassen (auch auf Touch). */
+.btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.btn:active:not(:disabled):not([aria-pressed="true"]):not(.btn--solid) {
+  background: color-mix(in srgb, var(--tone) 30%, var(--bg-ui));
+}
+.btn[aria-pressed="true"]:active:not(:disabled),
+.btn--solid:active:not(:disabled) {
+  background-image: linear-gradient(rgb(0 0 0 / 0.14), rgb(0 0 0 / 0.14));
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* aktiv / gedrückt: Fläche in Tonfarbe, dunkle Schrift */
+.btn[aria-pressed="true"] {
+  background: var(--tone);
+  color: var(--on-solid);
+  border-color: var(--tone);
+  font-weight: var(--fw-strong);
+  box-shadow: inset 0 0 0 1px var(--edge-solid);
+}
+/* Play (grün) / Pause (rot) */
+.btn--solid {
+  background: var(--solid-confirm);
+  color: var(--on-solid);
+  border-color: transparent;
+  font-weight: var(--fw-strong);
+  box-shadow: inset 0 0 0 1px var(--edge-solid);
+}
+.btn--solid.is-stop {
+  background: var(--solid-danger);
+}
+.btn--ghost {
+  border-color: transparent; /* in Panels */
+}
+
+/* Icon-Größe/Strich aus den Tokens */
+.btn svg {
+  width: var(--icon-size);
+  height: var(--icon-size);
+  stroke-width: var(--icon-stroke);
+  stroke-linecap: var(--icon-cap);
+  flex-shrink: 0;
+}
+
+/* NUR Light: Zelltyp-Buttons zeigen die Zellfarbe als kleiner Chip um das
+   Icon (Schrift bleibt neutral). Aktiv gefüllte Buttons brauchen ihn nicht. */
+:root[data-theme="light"] .btn--tool:not([aria-pressed="true"]) svg {
+  box-sizing: content-box;
+  padding: 3px;
+  border-radius: 4px;
+  background: var(--tone);
+  color: var(--on-solid);
+  box-shadow: inset 0 0 0 1px var(--edge-solid);
+}
+
+/* Trenner in der SimBar */
+.bar-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 8px 2px;
+  background: var(--border-ui);
+  flex-shrink: 0;
+}
+
+/* ── Hz-Regler (SimBar) ─────────────────────────────────────── */
+.hz-control {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.hz-control input[type="range"] {
+  width: 65px;
+  accent-color: var(--accent);
+  touch-action: pan-y; /* waagerechtes Ziehen gehört dem Regler */
+}
+.hz-control--status {
+  margin-right: auto; /* ohne Hilfetext (≤1260 px) linksbündig */
+  padding-right: 12px; /* Abstand zu „Schritt:“ */
+}
+.hz-control .hz-value {
+  color: var(--text);
+  font-weight: var(--fw-medium);
+  min-width: 32px;
+}
+
+/* ── Tastaturhinweise ───────────────────────────────────────────
+   <html data-keyhints="on|off"> setzt store/keymapStore.ts aus der Einstellung
+   (an / aus / automatisch: Maus oder erkannte Hardware-Tastatur).
+   In der Top-Bar zeigt eine kleine Marke unten rechts am Knopf das Kürzel
+   (data-key); sie braucht keine Breite und verschiebt keine Umbruch-Schwellen.
+   In der Auswahl-Leiste steht das Kürzel als Text hinter der Beschriftung. */
+.shortcut {
+  opacity: 0.7;
+  font-size: var(--fs-xs);
+}
+html:not([data-keyhints='on']) .shortcut { display: none; }
+.top-bar .shortcut { display: none; }
+.btn[data-key] { position: relative; }
+html[data-keyhints='on'] .btn[data-key]::after {
+  content: attr(data-key);
+  position: absolute;
+  right: 3px;
+  bottom: 1px;
+  font-size: 9px;
+  line-height: 1.2;
+  letter-spacing: 0;
+  opacity: 0.75;
+  pointer-events: none;
+}
 
 /* ── Statusleiste ───────────────────────────────────────────── */
 .status-row {
@@ -248,11 +393,20 @@ body { overflow: hidden; }
   padding: 3px 10px;
   background: var(--bg-ui);
   border-top: 1px solid var(--border-ui);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-dim);
   min-height: 24px;
 }
-.hint-text { flex: 1; }
+.hint-text {
+  flex: 1;
+}
+.status-item + .status-item {
+  margin-left: 12px;
+}
+.status-num {
+  color: var(--text);
+  font-weight: var(--fw-medium);
+}
 
 /* ── Loop-Error-Banner ──────────────────────────────────────── */
 .loop-error {
@@ -260,25 +414,38 @@ body { overflow: hidden; }
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  background: #2a0000;
-  border-top: 1px solid #880000;
-  font-size: 11px;
-  color: #ff6666;
+  background: color-mix(in srgb, var(--ink-danger) 14%, var(--bg-ui));
+  border-top: 1px solid var(--ink-danger);
+  font-size: var(--fs-xs);
+  color: var(--ink-danger);
 }
 
-/* ── Tablet-Kompaktmodus (≤ 1260px) ──────────────────────────── */
-/* Verhindert, dass Toolbar + SimBar auf iPad-Breiten (768–1194px)  */
-/* und schmalen Desktop-Fenstern die Top-Bar sprengen: Hz-Regler    */
-/* verschwindet, Reset/Tool-/Sim-Buttons werden Icon-only.          */
-/* (Reset bleibt als Icon sichtbar, nur reset-btn selbst NICHT      */
-/* ausblenden — die .btn-label-Regel unten erledigt den Rest.)      */
-@media (max-width: 1260px) {
-  .hz-control { display: none !important; }
-  .hint-text  { display: none; }
-  .logo-text  { display: none; }
-  .sim-btn .btn-label { display: none; }
-  .tool-btn .btn-label { display: none; }
+/* ── Top-Bar: gestaffelte Verdichtung ────────────────────────────
+   Gemessen (Einzeilenbreite beider Reihen zusammen, inkl. Projekte-, Theme- und
+   Einstellungs-Knopf). Die Beschriftungen sind sprachabhängig, daher je Sprache
+   eigene Schwellen (<html lang> setzt i18n/index.ts):
+                                      Deutsch   Englisch
+     volle Beschriftung + Hz            1974      1722
+     ohne Hz                            1866      1614
+     nur Icons                          1053      1046
+   (Die Kürzel sind kleine Marken an den Knöpfen und kosten keine Breite.)
+   Jede Stufe greift ~2 px oberhalb ihrer Breite, damit nie umgebrochen wird.
+   Ändert sich ein Knopf oder ein Text, diese Zahlen neu messen.
+   Der Hz-Regler verschwindet NIE, er wandert nur: Top-Bar (breit) ↔ Statusleiste. */
+.hz-control--status { display: none; }
+@media (max-width: 1976px) {
+  :root:lang(de) .hz-control--bar { display: none; }
+  :root:lang(de) .hz-control--status { display: flex; }
 }
+@media (max-width: 1868px) { :root:lang(de) .top-bar .btn-label { display: none; } }
+@media (max-width: 1724px) {
+  :root:lang(en) .hz-control--bar { display: none; }
+  :root:lang(en) .hz-control--status { display: flex; }
+}
+@media (max-width: 1616px) { :root:lang(en) .top-bar .btn-label { display: none; } }
+@media (max-width: 1260px) { .hint-text { display: none; } }
+/* Ab 1055 px passt alles in eine Zeile: nicht umbrechen, sondern bei Bedarf seitlich scrollen */
+@media (min-width: 1055px) { .top-bar .scroll-row { flex-wrap: nowrap; } }
 
 /* ── Mobile-Layout (< 600px) ────────────────────────────────── */
 @media (max-width: 599px) {
@@ -298,10 +465,262 @@ body { overflow: hidden; }
     border-bottom: none;
   }
 
-  /* Schritt-Overlay einblenden */
-  .step-overlay { display: block; }
+  /* Logo weicht den Buttons (Bottom-Bar) */
+  .logo {
+    display: none !important;
+  }
 
-  /* hz-control, reset-btn, hint-text, logo-text und alle .btn-label sind
+  /* Trenner würden beim Umbrechen allein am Zeilenanfang stehen */
+  .top-bar .bar-divider {
+    display: none;
+  }
+
+  /* Statusleiste: Hz-Regler mit Touch-Höhe, breiterer Schieber */
+  .status-row {
+    min-height: var(--touch-target);
+    gap: 12px;
+  }
+  .hz-control--status input[type="range"] {
+    width: 140px;
+    height: 32px;
+  }
+
+  /* Schritt-Overlay einblenden */
+  .step-overlay {
+    display: block;
+  }
+
+  /* hz-control, hint-text und alle .btn-label in der Top-Bar sind
      bereits durch den ≤1260px-Kompaktmodus oben abgedeckt (599px ist eine
      Teilmenge davon) — hier nur noch, was spezifisch für echtes Mobile ist. */
+}
+
+/* ── Einstellungsmenü ───────────────────────────────────────────
+   Am PC ein Seitenpanel rechts IM Canvas-Bereich (.canvas-area ist
+   position:relative), auf dem Handy ein Bottom-Sheet. Kein Hintergrund-
+   Schleier: der Canvas dahinter soll sichtbar bleiben, damit man die
+   Wirkung einer Änderung sofort sieht. */
+.settings-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(340px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-ui);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-float);
+  color: var(--text);
+  z-index: 20;
+}
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px 0 12px;
+  min-height: var(--touch-target);
+  border-bottom: 1px solid var(--border-ui);
+  flex-shrink: 0;
+  touch-action: none; /* Wegziehen am Kopf darf nicht scrollen */
+}
+.settings-head h2 {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-strong);
+  margin-right: auto;
+}
+.settings-grip {
+  display: none; /* nur im Bottom-Sheet */
+}
+.settings-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  user-select: none;
+}
+.settings-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: var(--touch-target);
+  border-bottom: 1px solid var(--border-ui);
+  margin-bottom: 8px;
+}
+.settings-section-head h3 {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-strong);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.settings-reset {
+  --ink: var(--text-muted);
+  --tone: var(--text-muted);
+  border-color: transparent;
+  padding: 0 8px;
+}
+.settings-field {
+  margin-bottom: 14px;
+}
+.settings-label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  margin-bottom: 6px;
+}
+.settings-seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.settings-seg .btn {
+  flex: 1 1 auto;
+  white-space: normal;
+  text-align: center;
+}
+.settings-hint {
+  margin-top: 6px;
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+.settings-reset-all {
+  align-self: stretch;
+  margin-top: 4px;
+}
+
+@media (max-width: 599px) {
+  .settings-panel {
+    top: auto;
+    left: 0;
+    width: auto;
+    max-height: 72%;
+    border-left: none;
+    border-top: 1px solid var(--border-strong);
+    border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+  }
+  .settings-grip {
+    display: block;
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    width: 36px;
+    height: 4px;
+    margin-left: -18px;
+    border-radius: 2px;
+    background: var(--border-strong);
+  }
+  .settings-head {
+    position: relative;
+    padding-top: 10px;
+  }
+}
+
+/* ── Looks (Einstellungen) ─────────────────────────────────────── */
+.look-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.look-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 6px;
+  text-align: left;
+  color: var(--text);
+  background: var(--bg-ui);
+  border: 1px solid var(--border-ui);
+  border-radius: var(--radius-ui);
+  cursor: pointer;
+  min-height: var(--touch-target);
+}
+.look-card:hover { border-color: var(--border-strong); }
+.look-card[aria-pressed='true'] {
+  border-color: var(--accent, currentColor);
+  box-shadow: 0 0 0 1px var(--accent, currentColor);
+}
+.look-card:focus-visible { outline: 2px solid var(--accent, currentColor); outline-offset: 2px; }
+.look-preview {
+  display: block;
+  max-width: 100%;
+  height: auto !important;
+  border-radius: 4px;
+}
+.look-name { font-size: var(--fs-sm); font-weight: var(--fw-medium); }
+.look-desc { font-size: var(--fs-xs); line-height: 1.35; color: var(--text-dim); }
+
+/* ── Projekte ──────────────────────────────────────────────────── */
+.proj-input {
+  width: 100%;
+  min-height: var(--touch-target);
+  padding: 0 10px;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-ui);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-ui);
+  user-select: text;
+}
+.proj-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.proj-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--border-ui);
+  border-radius: var(--radius-ui);
+}
+.proj-item[data-current='true'] { border-color: var(--accent, var(--border-strong)); }
+.proj-open {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: var(--touch-target);
+  padding: 2px 4px;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.proj-name { font-weight: var(--fw-medium); overflow-wrap: anywhere; }
+.proj-meta { font-size: var(--fs-xs); color: var(--text-dim); }
+.proj-actions { display: flex; gap: 4px; }
+.proj-actions .btn { flex: 1 1 0; }
+
+/* ── Tastenkürzel (Einstellungen) ──────────────────────────────── */
+.keys-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.keys-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 6px;
+}
+.keys-action { font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.keys-combo {
+  min-width: 64px;
+  padding: 4px 8px;
+  text-align: center;
+  font: inherit;
+  font-size: var(--fs-xs);
+  color: var(--text);
+  background: var(--bg-ui);
+  border: 1px solid var(--border-ui);
+  border-radius: var(--radius-ui);
+}
+.keys-combo[data-capturing='true'] { border-color: var(--accent); color: var(--accent); }
+.keys-reset { min-width: var(--touch-target); padding: 0; }
+@media (max-width: 599px) {
+  .keys-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .keys-row .btn { grid-column: auto; }
 }

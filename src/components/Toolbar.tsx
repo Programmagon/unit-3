@@ -1,13 +1,31 @@
-import { useUIStore }   from '../store/uiStore';
-import { useSelectionStore } from '../store/selectionStore';
-import type { Tool }    from '../canvas/input';
+import { useUIStore } from "../store/uiStore";
+import { useSelectionStore } from "../store/selectionStore";
+import type { Tool } from "../canvas/input";
+import type { ComponentType } from "react";
+import { Logo } from "./Logo";
+import { useT, type TKey } from "../i18n";
+import { useKeys } from "../lib/useKeys";
+import type { ActionId } from "../lib/keymap";
+import {
+  IconCable,
+  IconInverter,
+  IconDelay,
+  IconErase,
+  IconSelect,
+} from "./icons";
 
-const TOOLS: { id: Tool; icon: string; label: string; shortcut: string; color: string }[] = [
-  { id: 'cable',    icon: '━', label: 'Kabel',      shortcut: '1', color: 'var(--cell-cable)'  },
-  { id: 'inverter', icon: '◇', label: 'Umkehrer',   shortcut: '2', color: 'var(--cell-inv)'    },
-  { id: 'delay',    icon: '▷', label: 'Verzögerer', shortcut: '3', color: 'var(--cell-delay)'  },
-  { id: 'delete',   icon: '✕', label: 'Löschen',    shortcut: 'E', color: 'var(--cell-delete)' },
-  { id: 'select',   icon: '▭', label: 'Auswählen',  shortcut: 'S', color: 'var(--sim-blue)'    },
+const TOOLS: {
+  id: Tool;
+  Icon: ComponentType;
+  label: TKey;
+  action: ActionId;
+  cls: string;
+}[] = [
+  { id: "cable",    Icon: IconCable,    label: "tool.cable",      action: "toolCable", cls: "btn--tool btn--cable" },
+  { id: "inverter", Icon: IconInverter, label: "tool.inverter",   action: "toolInverter", cls: "btn--tool btn--inv" },
+  { id: "delay",    Icon: IconDelay,    label: "tool.delay", action: "toolDelay", cls: "btn--tool btn--delay" },
+  { id: "delete",   Icon: IconErase,    label: "tool.delete",    action: "toolErase", cls: "btn--danger" },
+  { id: "select",   Icon: IconSelect,   label: "tool.select",  action: "toolSelect", cls: "" },
 ];
 
 /**
@@ -16,33 +34,40 @@ const TOOLS: { id: Tool; icon: string; label: string; shortcut: string; color: s
  * die Werkzeug-Buttons selbst, keine versteckte Abhängigkeit zu SimBar mehr.
  */
 export function Toolbar() {
-  const tool    = useUIStore(s => s.tool);
-  const setTool = useUIStore(s => s.setTool);
-  const commitFloating = useSelectionStore(s => s.commitFloating);
-  const clearSelection = useSelectionStore(s => s.clearSelection);
+  const t = useT();
+  const keys = useKeys();
+  const tool = useUIStore((s) => s.tool);
+  const setTool = useUIStore((s) => s.setTool);
+  const commitFloating = useSelectionStore((s) => s.commitFloating);
+  const clearSelection = useSelectionStore((s) => s.clearSelection);
 
   return (
-    <div className="scroll-row" style={{
-      display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, padding: '0 8px', flex: 1, minWidth: 0,
-    }}>
-      <span style={{
-        color:       'var(--accent)',
-        fontWeight:  'bold',
-        fontSize:    14,
-        marginRight: 4,
-        whiteSpace:  'nowrap',
-      }}>
-        ▣<span className="logo-text"> Unit-3</span>
-      </span>
+    <div
+      className="scroll-row"
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: 4,
+        padding: "0 8px",
+        flex: 1,
+        minWidth: 0,
+      }}
+    >
+      <Logo />
 
-      {TOOLS.map(t => (
+      {TOOLS.map((tl) => (
         <button
-          key={t.id}
-          className="tool-btn"
+          key={tl.id}
+          className={`btn ${tl.cls}`.trim()}
+          aria-pressed={tool === tl.id}
+          aria-label={t(tl.label)}
+          title={keys.titled(t(tl.label), tl.action)}
+          data-key={keys.badge(tl.action)}
           onClick={() => {
             // Erneuter Klick auf das bereits aktive Werkzeug → deselektieren
             // (kein Werkzeug aktiv, alles pannt — siehe canvas/input.ts shouldPan).
-            const nextTool = tool === t.id ? null : t.id;
+            const nextTool = tool === tl.id ? null : tl.id;
             // Gilt für JEDEN Wechsel WEG von "select" — auch das reine
             // Deselektieren (nextTool=null). Eine schwebende Selektion wird
             // dabei committed (State-Machine-Regel: Werkzeugwechsel bestätigt
@@ -51,23 +76,16 @@ export function Toolbar() {
             // Werkzeugwechsel nicht überleben, sonst könnte ein ANDERES
             // Werkzeug versehentlich Zellen genau dort platzieren, wo die
             // vergessene Selektion noch lag.
-            if (tool === 'select' && nextTool !== 'select') {
-              if (useSelectionStore.getState().selection.status === 'floating') commitFloating();
+            if (tool === "select" && nextTool !== "select") {
+              if (useSelectionStore.getState().selection.status === "floating")
+                commitFloating();
               else clearSelection();
             }
             setTool(nextTool);
           }}
-          style={{
-            background:  tool === t.id ? t.color : 'transparent',
-            color:       tool === t.id ? '#000'  : t.color,
-            borderColor: tool === t.id ? t.color : t.color + '55',
-            fontWeight:  tool === t.id ? 'bold'  : 'normal',
-            flexShrink:  0,
-          }}
         >
-          {t.icon}
-          <span className="btn-label"> {t.label}</span>
-          <span className="shortcut"> [{t.shortcut}]</span>
+          <tl.Icon />
+          <span className="btn-label"> {t(tl.label)}</span>
         </button>
       ))}
     </div>

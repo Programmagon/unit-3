@@ -27,13 +27,19 @@ export interface SaveFile {
 
 /**
  * Wird bei ungültigem JSON, unbekannter Version oder kaputter Struktur geworfen.
- * Die `message` ist bereits so formuliert, dass sie direkt in der UI angezeigt
- * werden kann (z. B. per alert()).
+ * `code` (+ `detail`) ist sprachunabhängig; die UI bildet daraus den Anzeige-
+ * text (i18n → errorText). `message` bleibt ein deutscher Text für Logs.
  */
+export type SerializeErrorCode = 'unreadable' | 'version';
+
 export class SerializeError extends Error {
-  constructor(message: string) {
-    super(message);
+  readonly code: SerializeErrorCode;
+  readonly detail?: string;
+  constructor(code: SerializeErrorCode, detail?: string) {
+    super(code === 'version' ? `Unbekannte Datei-Version: ${detail ?? '?'}` : 'Datei konnte nicht gelesen werden');
     this.name = 'SerializeError';
+    this.code = code;
+    this.detail = detail;
   }
 }
 
@@ -59,26 +65,26 @@ export function deserialize(json: string): { grid: Grid; camera: Camera } {
   try {
     parsed = JSON.parse(json);
   } catch {
-    throw new SerializeError('Datei konnte nicht gelesen werden');
+    throw new SerializeError('unreadable');
   }
 
   if (typeof parsed !== 'object' || parsed === null) {
-    throw new SerializeError('Datei konnte nicht gelesen werden');
+    throw new SerializeError('unreadable');
   }
   const file = parsed as Partial<SaveFile>;
 
   if (file.version !== CURRENT_VERSION) {
-    throw new SerializeError(`Unbekannte Datei-Version: ${String(file.version)}`);
+    throw new SerializeError('version', String(file.version));
   }
   if (!Array.isArray(file.cells)) {
-    throw new SerializeError('Datei konnte nicht gelesen werden');
+    throw new SerializeError('unreadable');
   }
   const cam = file.camera;
   if (
     typeof cam !== 'object' || cam === null ||
     typeof cam.x !== 'number' || typeof cam.y !== 'number' || typeof cam.zoom !== 'number'
   ) {
-    throw new SerializeError('Datei konnte nicht gelesen werden');
+    throw new SerializeError('unreadable');
   }
 
   const grid: Grid = new Map();
@@ -124,19 +130,19 @@ export function deserializeSelection(json: string): BufferCell[] {
   try {
     parsed = JSON.parse(json);
   } catch {
-    throw new SerializeError('Datei konnte nicht gelesen werden');
+    throw new SerializeError('unreadable');
   }
 
   if (typeof parsed !== 'object' || parsed === null) {
-    throw new SerializeError('Datei konnte nicht gelesen werden');
+    throw new SerializeError('unreadable');
   }
   const file = parsed as Partial<SelectionFile>;
 
   if (file.version !== CURRENT_VERSION) {
-    throw new SerializeError(`Unbekannte Datei-Version: ${String(file.version)}`);
+    throw new SerializeError('version', String(file.version));
   }
   if (!Array.isArray(file.cells)) {
-    throw new SerializeError('Datei konnte nicht gelesen werden');
+    throw new SerializeError('unreadable');
   }
 
   const cells: BufferCell[] = [];

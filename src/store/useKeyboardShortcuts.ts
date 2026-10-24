@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { useUIStore }        from './uiStore';
 import { useGridStore }      from './gridStore';
 import { useSelectionStore } from './selectionStore';
+import { useKeymapStore } from './keymapStore';
+import { comboFromEvent } from '../lib/keymap';
 
 /** Pfeiltaste → Delta einer Zelle, für die Selektions-Nudge weiter unten. */
 const ARROW_DELTA: Record<string, [number, number]> = {
@@ -50,6 +52,8 @@ export function useKeyboardShortcuts(getPasteAnchor?: () => [number, number] | n
   const clearSelection   = useSelectionStore(s => s.clearSelection);
   const escapeSelection  = useSelectionStore(s => s.escape);
 
+  const lookup     = useKeymapStore(s => s.lookup);
+
   const hasSelection = selection.status === 'selected' || selection.status === 'floating';
 
   useEffect(() => {
@@ -63,84 +67,33 @@ export function useKeyboardShortcuts(getPasteAnchor?: () => [number, number] | n
     };
 
     const onKey = (e: KeyboardEvent) => {
-      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+      const target = e.target as HTMLElement;
+      if (['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
+      // Einstellungsmenü & Co.: Leertaste/Buchstaben dort gehören dem fokussierten Bedienelement
+      if (target.closest?.('[data-no-shortcuts]')) return;
+      // Beim Aufnehmen einer neuen Taste (Einstellungen → Tastenkürzel) nichts auslösen
+      if (useKeymapStore.getState().capturing !== null) return;
 
-      // Reine Einzeltasten-Shortcuts (1/2/3/E/S/R/F/Pfeile) müssen Strg/Cmd/
-      // Alt ignorieren, sonst kollidieren sie mit Browser-Shortcuts wie
-      // Strg+S (Speichern) oder Strg+R (Neuladen). Die explizit modifier-
-      // basierten Shortcuts (Strg+C/X/V/D/Z/Y weiter unten) sind davon
-      // unberührt.
       const noModifier = !e.ctrlKey && !e.metaKey && !e.altKey;
 
-      // Werkzeuge
-      if (noModifier && e.key === '1') { if (tool === 'select') releaseSelectionForToolSwitch(); setTool('cable'); }
-      if (noModifier && e.key === '2') { if (tool === 'select') releaseSelectionForToolSwitch(); setTool('inverter'); }
-      if (noModifier && e.key === '3') { if (tool === 'select') releaseSelectionForToolSwitch(); setTool('delay'); }
-      if (noModifier && (e.key === 'e' || e.key === 'E')) { if (tool === 'select') releaseSelectionForToolSwitch(); setTool('delete'); }
-      if (noModifier && (e.key === 's' || e.key === 'S')) {
-        // Entspricht dem Toggle-Verhalten des Werkzeug-Buttons in
-        // Toolbar.tsx: erneutes Aktivieren eines bereits aktiven
-        // Werkzeugs schaltet es aus.
-        if (tool === 'select') { releaseSelectionForToolSwitch(); setTool(null); }
-        else setTool('select');
-      }
-
-      // ── Selektion: Pfeiltasten-Nudge (nach Tiled-Vorbild) ────────────
-      // Nur wenn das Auswählen-Werkzeug aktiv ist und etwas selektiert ist
-      // — sonst bleibt ArrowRight der Simulations-Schritt-Shortcut weiter
-      // unten (die beiden Bedeutungen würden sonst kollidieren). Kein
-      // Debounce/Batching mehr nötig: nudgeSelection schreibt nie ins Grid,
-      // beliebig viele Nudges werden erst bei EINEM commitFloating() zu
-      // einem einzigen Undo-Schritt.
+      // ── Feste Tasten ──────────────────────────────────────────────
+      // Pfeiltasten-Nudge (nach Tiled-Vorbild): nur mit aktivem Auswählen-
+      // Werkzeug und Selektion — sonst bleibt der Pfeil nach rechts der
+      // Simulations-Schritt (Zweitbelegung von "step"). nudgeSelection schreibt
+      // nie ins Grid; beliebig viele Nudges werden erst bei EINEM commitFloating()
+      // zu einem einzigen Undo-Schritt.
       if (noModifier && tool === 'select' && hasSelection && e.key in ARROW_DELTA) {
         e.preventDefault();
         const [dx, dy] = ARROW_DELTA[e.key];
         nudgeSelection(dx, dy);
         return;
       }
-
-      // Simulation
-      // e.repeat-Guard: ohne dies togglet Halten der Leertaste (OS-Tastenwiederholung)
-      // rasant zwischen Play/Pause hin und her.
-      // Schwebende Selektion vor Simulationsstart committen (analog zu
-      // SimBar.tsx) — Simulation muss den echten Grid-Zustand sehen, nicht
-      // eine noch nicht geschriebene, nur im Speicher schwebende Änderung.
-      if (e.key === ' ' && !e.repeat) {
-        e.preventDefault();
-        if (!running && selection.status === 'floating') commitFloating();
-        setRunning(!running);
-      }
-      if (e.key === '.' || e.key === 'ArrowRight') {
-        e.preventDefault();
-        if (!running) {
-          if (selection.status === 'floating') commitFloating();
-          step();
-        }
-      }
-
-      // Undo/Redo
-      // e.key.toLowerCase() statt direktem Vergleich mit 'z'/'y': bei
-      // gedrückter Shift-Taste liefert der Browser i. d. R. den Großbuchstaben
-      // ('Z' statt 'z') — ein reiner === 'z'-Vergleich würde Ctrl+Shift+Z
-      // dadurch nie erkennen.
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
-        e.preventDefault();
-        undo();
-      } else if (
-        (e.ctrlKey || e.metaKey) &&
-        (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))
-      ) {
-        e.preventDefault();
-        redo();
-      }
-
-      // ── Selektion ─────────────────────────────────────────────────
       if (e.key === 'Escape') {
-        // Bei schwebender Selektion: exakt den Zustand von vor dem
-        // Anheben wiederherstellen (kein Undo-Schritt) — sonst abwählen.
+        // Bei schwebender Selektion: exakt den Zustand von vor dem Anheben
+        // wiederherstellen (kein Undo-Schritt) — sonst abwählen.
         escapeSelection();
-        // Escape hebt jetzt auch das aktive Werkzeug auf (egal welches) —
-        // kein Werkzeug aktiv, alles pannt (siehe canvas/input.ts shouldPan).
+        // Escape hebt auch das aktive Werkzeug auf (egal welches) — kein
+        // Werkzeug aktiv, alles pannt (siehe canvas/input.ts shouldPan).
         setTool(null);
         return;
       }
@@ -149,50 +102,65 @@ export function useKeyboardShortcuts(getPasteAnchor?: () => [number, number] | n
         commitFloating();
         return;
       }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && hasSelection) {
-        e.preventDefault();
-        deleteSelectionContents();
-        return;
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && hasSelection) {
-        e.preventDefault();
-        copySelection();
-        return;
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x' && hasSelection) {
-        e.preventDefault();
-        cutSelection();
-        return;
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && !e.repeat && clipboard && clipboard.buffer.length > 0) {
-        e.preventDefault();
-        const anchor = getPasteAnchor?.() ?? [0, 0];
-        pasteClipboard({ x: anchor[0], y: anchor[1] });
-        return;
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && !e.repeat && hasSelection) {
-        e.preventDefault();
-        duplicateSelection();
-        return;
-      }
-      if (noModifier && (e.key === 'r' || e.key === 'R') && !e.repeat && hasSelection) {
-        e.preventDefault();
-        rotateSelection(e.shiftKey ? -1 : 1);
-        return;
-      }
-      // F/⇧F statt M/⇧M — Namenskonvention aus dem Referenzprojekt
-      // übernommen ("Flip" statt "Mirror"), auch wenn die UI weiterhin
-      // "Spiegeln" sagt.
-      if (noModifier && (e.key === 'f' || e.key === 'F') && !e.repeat && hasSelection) {
-        e.preventDefault();
-        flipSelection(e.shiftKey ? 'y' : 'x');
-        return;
+
+      // ── Belegbare Aktionen ────────────────────────────────────────
+      const combo = comboFromEvent(e);
+      const action = combo ? lookup.get(combo) : undefined;
+      if (!action) return;
+
+      switch (action) {
+        case 'toolCable':    if (tool === 'select') releaseSelectionForToolSwitch(); setTool('cable'); break;
+        case 'toolInverter': if (tool === 'select') releaseSelectionForToolSwitch(); setTool('inverter'); break;
+        case 'toolDelay':    if (tool === 'select') releaseSelectionForToolSwitch(); setTool('delay'); break;
+        case 'toolErase':    if (tool === 'select') releaseSelectionForToolSwitch(); setTool('delete'); break;
+        case 'toolSelect':
+          // Entspricht dem Toggle-Verhalten des Werkzeug-Buttons in
+          // Toolbar.tsx: erneutes Aktivieren eines aktiven Werkzeugs schaltet es aus.
+          if (tool === 'select') { releaseSelectionForToolSwitch(); setTool(null); }
+          else setTool('select');
+          break;
+
+        case 'play':
+          // e.repeat-Guard: ohne dies togglet Halten der Taste (OS-Wiederholung) rasant Play/Pause.
+          // Schwebende Selektion vor dem Start committen — die Simulation muss den echten Grid-Zustand sehen.
+          e.preventDefault();
+          if (e.repeat) break;
+          if (!running && selection.status === 'floating') commitFloating();
+          setRunning(!running);
+          break;
+        case 'step':
+          e.preventDefault();
+          if (!running) {
+            if (selection.status === 'floating') commitFloating();
+            step();
+          }
+          break;
+
+        case 'undo': e.preventDefault(); undo(); break;
+        case 'redo': e.preventDefault(); redo(); break;
+
+        case 'deleteSel':  if (hasSelection) { e.preventDefault(); deleteSelectionContents(); } break;
+        case 'copy':       if (hasSelection) { e.preventDefault(); copySelection(); } break;
+        case 'cut':        if (hasSelection) { e.preventDefault(); cutSelection(); } break;
+        case 'paste':
+          if (!e.repeat && clipboard && clipboard.buffer.length > 0) {
+            e.preventDefault();
+            const anchor = getPasteAnchor?.() ?? [0, 0];
+            pasteClipboard({ x: anchor[0], y: anchor[1] });
+          }
+          break;
+        case 'duplicate':  if (!e.repeat && hasSelection) { e.preventDefault(); duplicateSelection(); } break;
+        case 'rotateCw':   if (!e.repeat && hasSelection) { e.preventDefault(); rotateSelection(1); } break;
+        case 'rotateCcw':  if (!e.repeat && hasSelection) { e.preventDefault(); rotateSelection(-1); } break;
+        // flipH/flipV: "Flip" statt "Mirror" (Namenskonvention aus dem Referenzprojekt)
+        case 'flipH':      if (!e.repeat && hasSelection) { e.preventDefault(); flipSelection('x'); } break;
+        case 'flipV':      if (!e.repeat && hasSelection) { e.preventDefault(); flipSelection('y'); } break;
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [
-    tool, running, setTool, setRunning, step, undo, redo,
+    lookup, tool, running, setTool, setRunning, step, undo, redo,
     selection, clipboard, hasSelection, getPasteAnchor,
     copySelection, cutSelection, pasteClipboard, duplicateSelection,
     deleteSelectionContents, rotateSelection, flipSelection, nudgeSelection,

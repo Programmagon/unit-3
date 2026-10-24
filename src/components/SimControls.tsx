@@ -1,5 +1,10 @@
 import { useGridStore } from '../store/gridStore';
 import { useUIStore }   from '../store/uiStore';
+import { useSettingsStore } from '../store/settingsStore';
+import { IconWarning }  from './icons';
+import { HzControl }    from './HzControl';
+import { useT }         from '../i18n';
+import { useKeys }      from '../lib/useKeys';
 
 /**
  * Statusleiste — Loop-Error-Banner + Zähler + Hilfetext.
@@ -12,38 +17,42 @@ import { useUIStore }   from '../store/uiStore';
  * bedeutet Klicken/Ziehen etwas anderes als bei den Platzier-Werkzeugen.
  */
 export function SimControls() {
+  const t         = useT();
+  const keys      = useKeys();
   const steps     = useGridStore(s => s.stepCount);
   const cells     = useGridStore(s => s.grid.size);
   const loopError = useGridStore(s => s.loopError);
   const tool      = useUIStore(s => s.tool);
+  const touchTap  = useSettingsStore(s => s.settings.touchTap);
 
   const hint = tool === 'select'
-    ? 'Ziehen: Auswählen (ersetzt vorherige Auswahl) · Ziehen auf Selektion: ' +
-      'Aufheben & Verschieben · R/⇧R: Drehen · F/⇧F: Spiegeln · Pfeiltasten: ' +
-      'zellenweise verschieben · Enter: Bestätigen · Esc: Abbrechen · ' +
-      'Strg+C/X/V/D: Kopieren/Ausschneiden/Einfügen/Duplizieren'
-    : 'Klick: Platzieren · Gleicher Typ ⊕: Force · Rechtsklick/Long-Press: Löschen · ' +
-      'Alt+Drag: Schwenken · Scroll/Pinch: Zoom';
+    ? t('hint.select', {
+        rotate: `${keys.label('rotateCw')} / ${keys.label('rotateCcw')}`,
+        flip:   `${keys.label('flipH')} / ${keys.label('flipV')}`,
+        clip:   ['copy', 'cut', 'paste', 'duplicate'].map(a => keys.label(a as 'copy')).join(' / '),
+      })
+    : touchTap === 'delete' ? t('hint.placeSwap') : t('hint.place');
 
   return (
     <div className="status-bar">
       {/* Loop-Error — immer sichtbar wenn gesetzt */}
       {loopError && (
         <div className="loop-error">
-          <span style={{ fontSize: 14 }}>⚠</span>
-          <strong>SimLoopError —</strong>
-          <span>{loopError}</span>
+          <IconWarning aria-hidden />
+          <strong>{t('status.simError')} —</strong>
+          <span>{t('err.simLoop')}</span>
         </div>
       )}
 
       {/* Zähler + Hilfetext */}
       <div className="status-row">
         <span className="hint-text">{hint}</span>
-        <span style={{ color: 'var(--text-dim)', marginRight: 12 }}>
-          Schritt: <span style={{ color: 'var(--sim-blue)' }}>{steps}</span>
+        <HzControl where="status" />
+        <span className="status-item">
+          {t('status.steps')}: <span className="status-num">{steps}</span>
         </span>
-        <span style={{ color: 'var(--text-dim)' }}>
-          Zellen: <span style={{ color: 'var(--sim-blue)' }}>{cells}</span>
+        <span className="status-item">
+          {t('status.cells')}: <span className="status-num">{cells}</span>
         </span>
       </div>
     </div>
