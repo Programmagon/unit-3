@@ -7,6 +7,7 @@ import { SimControls }  from './components/SimControls';
 import { SelectionActions } from './components/SelectionActions';
 import { SettingsMenu } from './components/SettingsMenu';
 import { ProjectsPanel } from './components/ProjectsPanel';
+import { Minimap } from './components/Minimap';
 import { useGridStore } from './store/gridStore';
 import { useSelectionStore } from './store/selectionStore';
 import { useKeyboardShortcuts } from './store/useKeyboardShortcuts';
@@ -165,6 +166,7 @@ export default function App() {
         <div className="step-overlay">
           {t('status.overlay', { steps, cells })}
         </div>
+        <Minimap canvas={canvasRef} />
         <SettingsMenu />
         <ProjectsPanel />
       </div>

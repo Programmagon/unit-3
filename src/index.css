@@ -724,3 +724,20 @@ html[data-keyhints='on'] .btn[data-key]::after {
   .keys-row { grid-template-columns: minmax(0, 1fr) auto; }
   .keys-row .btn { grid-column: auto; }
 }
+
+/* ── Minimap ───────────────────────────────────────────────────── */
+/* Unten links im Canvas; die Auswahl-Leiste sitzt mittig darüber und umbricht bei Platzmangel. */
+.minimap {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 10;
+  background: color-mix(in srgb, var(--bg-ui) 85%, transparent);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-ui);
+  box-shadow: var(--shadow-float);
+  touch-action: none;
+  cursor: crosshair;
+}
+/* .canvas-area canvas { display: block } ist spezifischer als .minimap allein */
+@media (max-width: 599px) { .canvas-area .minimap { display: none; } }

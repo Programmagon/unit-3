@@ -15,16 +15,18 @@ export const ACTION_IDS = [
   'undo', 'redo',
   'copy', 'cut', 'paste', 'duplicate',
   'rotateCw', 'rotateCcw', 'flipH', 'flipV', 'deleteSel',
+  'toggleMinimap',
 ] as const;
 export type ActionId = typeof ACTION_IDS[number];
 
-export type ActionGroup = 'tools' | 'sim' | 'edit' | 'selection';
+export type ActionGroup = 'tools' | 'sim' | 'edit' | 'selection' | 'view';
 
 export const ACTION_GROUPS: readonly { id: ActionGroup; actions: readonly ActionId[] }[] = [
   { id: 'tools',     actions: ['toolCable', 'toolInverter', 'toolDelay', 'toolErase', 'toolSelect'] },
   { id: 'sim',       actions: ['play', 'step'] },
   { id: 'edit',      actions: ['undo', 'redo', 'copy', 'cut', 'paste', 'duplicate'] },
   { id: 'selection', actions: ['rotateCw', 'rotateCcw', 'flipH', 'flipV', 'deleteSel'] },
+  { id: 'view',      actions: ['toggleMinimap'] },
 ];
 
 /** Standardbelegung. Mehrere Einträge = gleichwertige Alternativen (Zweitbelegungen). */
@@ -47,6 +49,7 @@ export const DEFAULT_KEYS: Readonly<Record<ActionId, readonly string[]>> = {
   flipH:        ['f'],
   flipV:        ['shift+f'],
   deleteSel:    ['delete', 'backspace'],
+  toggleMinimap: ['m'],
 };
 
 /** Feste Tasten, die nicht belegt werden dürfen (Escape/Enter/Tab/Pfeile haben feste Aufgaben). */

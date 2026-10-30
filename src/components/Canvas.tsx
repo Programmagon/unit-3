@@ -36,6 +36,10 @@ export interface CanvasHandle {
    * vorhersagbare, immer sichtbare Ankerpunkt.
    */
   getViewportCenterCell: () => [number, number];
+  /** Sichtbare Canvas-Größe in CSS-Pixeln (für die Minimap). */
+  getViewSize: () => { w: number; h: number };
+  /** Verschiebt die Kamera so, dass der Weltpunkt (wx, wy) in der Bildmitte liegt (Minimap). */
+  centerOn: (wx: number, wy: number) => void;
 }
 
 export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
@@ -68,6 +72,18 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
       if (!c) return [0, 0];
       const rect = c.getBoundingClientRect();
       return getCellAt(rect.left + rect.width / 2, rect.top + rect.height / 2, c, cameraRef.current);
+    },
+    getViewSize: () => {
+      const c = canvasRef.current;
+      return { w: c?.clientWidth ?? 0, h: c?.clientHeight ?? 0 };
+    },
+    centerOn: (wx, wy) => {
+      const c = canvasRef.current;
+      if (!c) return;
+      const cam = cameraRef.current;
+      cam.x = wx - c.clientWidth / cam.zoom / 2;
+      cam.y = wy - c.clientHeight / cam.zoom / 2;
+      dirtyRef.current = true;
     },
   }), []);
 

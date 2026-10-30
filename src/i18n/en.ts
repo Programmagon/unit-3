@@ -29,6 +29,9 @@ export const en: Record<TKey, string> = {
   'keys.group.sim': 'Simulation',
   'keys.group.edit': 'Edit',
   'keys.group.selection': 'Selection',
+  'keys.group.view': 'View',
+  'view.minimap': 'Show/hide minimap',
+  'minimap.label': 'Overview. Tap or drag to move the view.',
   'keys.change': 'Change',
   'keys.changeAria': 'Change key for “{action}”',
   'keys.press': 'Press a key …',
@@ -154,6 +157,10 @@ export const en: Record<TKey, string> = {
   'set.glow': 'Glow',
   'set.glowHint': 'Applies to the dark color scheme only.',
   'set.grid': 'Grid',
+  'set.minimap': 'Minimap',
+  'set.minimapHint':
+    'Overview of all cells at the bottom left, with the visible area. Tap or drag inside it to move the view. ' +
+    'Hidden on small screens.',
   'set.offTone': 'Off colors',
   'set.offTone.original': 'Original',
   'set.offTone.originalTitle': 'Fixed theme colors',

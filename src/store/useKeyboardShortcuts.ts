@@ -3,6 +3,7 @@ import { useUIStore }        from './uiStore';
 import { useGridStore }      from './gridStore';
 import { useSelectionStore } from './selectionStore';
 import { useKeymapStore } from './keymapStore';
+import { useSettingsStore } from './settingsStore';
 import { comboFromEvent } from '../lib/keymap';
 
 /** Pfeiltaste → Delta einer Zelle, für die Selektions-Nudge weiter unten. */
@@ -135,6 +136,14 @@ export function useKeyboardShortcuts(getPasteAnchor?: () => [number, number] | n
             step();
           }
           break;
+
+        case 'toggleMinimap': {
+          e.preventDefault();
+          if (e.repeat) break;
+          const st = useSettingsStore.getState();
+          st.setSetting('minimap', !st.settings.minimap);
+          break;
+        }
 
         case 'undo': e.preventDefault(); undo(); break;
         case 'redo': e.preventDefault(); redo(); break;
