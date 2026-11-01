@@ -2,13 +2,33 @@ import { useEffect, useRef, type RefObject } from 'react';
 import { useGridStore } from '../store/gridStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { getCellPalette } from '../canvas/cellStyle';
-import { fromKey } from '../simulation/grid';
+import { drawOverview } from '../canvas/renderer';
+import type { Grid } from '../simulation/types';
 import { useT } from '../i18n';
 import type { CanvasHandle } from './Canvas';
 
 const W = 168;
 const H = 112;
 const PAD = 2; // Zellen Rand um den Inhalt
+
+interface Bounds { x0: number; y0: number; x1: number; y1: number }
+const boundsCache = new WeakMap<Grid, Bounds>();
+/** Umriss aller Zellen in Weltkoordinaten (x1/y1 exklusiv); je Grid-Objekt gemerkt. */
+function boundsOf(grid: Grid): Bounds {
+  let b = boundsCache.get(grid);
+  if (b) return b;
+  b = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+  for (const k of grid.keys()) {
+    const i = k.indexOf(',');
+    const x = +k.slice(0, i), y = +k.slice(i + 1);
+    if (x < b.x0) b.x0 = x;
+    if (y < b.y0) b.y0 = y;
+    if (x + 1 > b.x1) b.x1 = x + 1;
+    if (y + 1 > b.y1) b.y1 = y + 1;
+  }
+  boundsCache.set(grid, b);
+  return b;
+}
 
 interface Mapping { minX: number; minY: number; s: number; ox: number; oy: number }
 
@@ -55,31 +75,19 @@ export function Minimap({ canvas }: { canvas: RefObject<CanvasHandle | null> }) 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
 
-      // Kartenbereich: Zellen + sichtbarer Ausschnitt
+      // Kartenbereich: Zellen + sichtbarer Ausschnitt. Der Umriss der Zellen wird je Grid
+      // einmal berechnet (bounds), nicht bei jeder Kamerabewegung.
+      const bb = boundsOf(grid);
       const vx0 = cam.x, vy0 = cam.y, vx1 = cam.x + view.w / cam.zoom, vy1 = cam.y + view.h / cam.zoom;
-      let minX = vx0, minY = vy0, maxX = vx1, maxY = vy1;
-      const coords: [number, number, string][] = [];
-      for (const [k, cell] of grid) {
-        const [x, y] = fromKey(k);
-        coords.push([x, y, cell.type + (cell.state ? '1' : '0')]);
-        if (x < minX) minX = x;
-        if (y < minY) minY = y;
-        if (x + 1 > maxX) maxX = x + 1;
-        if (y + 1 > maxY) maxY = y + 1;
-      }
-      minX -= PAD; minY -= PAD; maxX += PAD; maxY += PAD;
+      const minX = Math.min(vx0, bb.x0) - PAD, minY = Math.min(vy0, bb.y0) - PAD;
+      const maxX = Math.max(vx1, bb.x1) + PAD, maxY = Math.max(vy1, bb.y1) + PAD;
       const ww = maxX - minX, wh = maxY - minY;
       const s = Math.min(W / ww, H / wh);
       const ox = (W - ww * s) / 2, oy = (H - wh * s) / 2;
       map.current = { minX, minY, s, ox, oy };
 
       const pal = getCellPalette();
-      const cs = Math.max(1, s);
-      for (const [x, y, key] of coords) {
-        const type = key.slice(0, -1) as 'cable' | 'inverter' | 'delay';
-        ctx.fillStyle = key.endsWith('1') ? pal.on[type] : pal.off[type];
-        ctx.fillRect(ox + (x - minX) * s, oy + (y - minY) * s, cs, cs);
-      }
+      drawOverview(ctx, grid, minX, minY, s, ox, oy);
 
       // Sichtbarer Ausschnitt
       const rx = ox + (vx0 - minX) * s, ry = oy + (vy0 - minY) * s;

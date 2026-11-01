@@ -1,6 +1,17 @@
 export interface Camera { x: number; y: number; zoom: number; }
-export const MIN_ZOOM = 6;
+/** Pixel pro Zelle. Bei 1 passen auf ein 2048 px breites iPad rund 2000 Zellen. */
+export const MIN_ZOOM = 1;
 export const MAX_ZOOM = 120;
+/**
+ * Unterhalb davon ist die Ansicht eine reine Übersicht: Die Platzier-Werkzeuge
+ * (Kabel, Umkehrer, Verzögerer, Löschen, Power) sind aus, Ziehen verschiebt die
+ * Ansicht. Zellen von wenigen Pixeln trifft man nicht zuverlässig. Das war
+ * früher der kleinste Zoom, die Bearbeitung ändert sich also nicht.
+ */
+export const EDIT_MIN_ZOOM = 6;
+export function clampZoom(z: number): number {
+  return Number.isFinite(z) ? Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z)) : 36;
+}
 export function worldToScreen(wx: number, wy: number, cam: Camera): [number, number] {
   return [(wx - cam.x) * cam.zoom, (wy - cam.y) * cam.zoom];
 }

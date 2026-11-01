@@ -6,13 +6,13 @@ import { IconRotateCcw } from './icons';
 
 const LABEL: Record<ActionId, TKey> = {
   toolCable: 'tool.cable', toolInverter: 'tool.inverter', toolDelay: 'tool.delay',
-  toolErase: 'tool.delete', toolSelect: 'tool.select',
+  toolErase: 'tool.delete', toolSelect: 'tool.select', toolPower: 'tool.power',
   play: 'bar.play', step: 'bar.step',
   undo: 'bar.undo', redo: 'bar.redo',
   copy: 'sel.copy', cut: 'sel.cut', paste: 'sel.paste', duplicate: 'sel.duplicate',
   rotateCw: 'sel.rotateCw', rotateCcw: 'sel.rotateCcw',
   flipH: 'sel.flipH', flipV: 'sel.flipV', deleteSel: 'sel.delete',
-  toggleMinimap: 'view.minimap',
+  toggleMinimap: 'view.minimap', fitView: 'view.fit',
 };
 
 const GROUP_LABEL = {
