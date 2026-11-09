@@ -20,6 +20,134 @@ interface DrawableCell {
 /** Typ der Zelle an dieser Weltposition (undefined = leer) — für Verschmelzen und Konturen */
 type TypeAt = (x: number, y: number) => CellType | undefined;
 
+// ── Übersicht (kleiner Zoom) ─────────────────────────────────────────
+/**
+ * Unterhalb dieses Zooms zeichnet der Renderer nur noch Farbflächen: keine
+ * Konturen, Rundung, Fugen, Symbole und kein Leuchten (bei wenigen Pixeln pro
+ * Zelle nicht zu erkennen). Je Typ und Zustand EIN Pfad und EIN fill() — auch
+ * hunderttausend Zellen bleiben flüssig. Aus dem Grid werden die Zellen einmal
+ * in flache Arrays umgerechnet und je Grid-Objekt gemerkt, ein Schwenk oder
+ * Zoom rechnet also nichts neu.
+ */
+const SIMPLE_ZOOM = 8;
+const TYPES: readonly CellType[] = ['cable', 'inverter', 'delay'];
+
+interface Flat { n: number; xs: Int32Array; ys: Int32Array; kind: Uint8Array }
+
+function flattenGrid(grid: Grid): Flat {
+  const n = grid.size;
+  const xs = new Int32Array(n), ys = new Int32Array(n), kind = new Uint8Array(n);
+  let i = 0;
+  for (const [k, c] of grid) {
+    const [x, y] = fromKey(k);
+    xs[i] = x; ys[i] = y; kind[i] = TYPES.indexOf(c.type) * 2 + (c.state ? 1 : 0);
+    i++;
+  }
+  return { n, xs, ys, kind };
+}
+
+const flatCache = new WeakMap<Grid, Flat>();
+function flatOf(grid: Grid): Flat {
+  let f = flatCache.get(grid);
+  if (!f) { f = flattenGrid(grid); flatCache.set(grid, f); }
+  return f;
+}
+
+function flatFromCells(cells: DrawableCell[]): Flat {
+  const n = cells.length;
+  const xs = new Int32Array(n), ys = new Int32Array(n), kind = new Uint8Array(n);
+  cells.forEach((c, i) => { xs[i] = c.x; ys[i] = c.y; kind[i] = TYPES.indexOf(c.type) * 2 + (c.state ? 1 : 0); });
+  return { n, xs, ys, kind };
+}
+
+/**
+ * Große Grids: einmal in ein Bitmap mit einem Pixel pro Zelle schreiben (je Grid-Objekt
+ * und Palette gemerkt) und pro Frame nur noch den sichtbaren Ausschnitt skaliert
+ * hineinkopieren. Kostet pro Frame nichts mehr, egal wie viele Zellen es sind.
+ * Bei Grids, deren Umriss riesig ist (weit verstreute Zellen), bleibt es beim Pfad.
+ */
+const BITMAP_MIN_CELLS = 3000;
+const BITMAP_MAX_PIXELS = 4_000_000;
+
+interface CellBitmap { pal: Palette; canvas: HTMLCanvasElement; x0: number; y0: number; w: number; h: number }
+const bitmapCache = new WeakMap<Flat, CellBitmap | null>();
+
+function rgbaOf(color: string): [number, number, number, number] {
+  const c = document.createElement('canvas');
+  c.width = c.height = 1;
+  const x = c.getContext('2d')!;
+  x.fillStyle = color;
+  x.fillRect(0, 0, 1, 1);
+  const d = x.getImageData(0, 0, 1, 1).data;
+  return [d[0], d[1], d[2], d[3]];
+}
+
+function bitmapOf(f: Flat, pal: Palette): CellBitmap | null {
+  const hit = bitmapCache.get(f);
+  if (hit !== undefined && (hit === null || hit.pal === pal)) return hit;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i < f.n; i++) {
+    if (f.xs[i] < x0) x0 = f.xs[i];
+    if (f.xs[i] > x1) x1 = f.xs[i];
+    if (f.ys[i] < y0) y0 = f.ys[i];
+    if (f.ys[i] > y1) y1 = f.ys[i];
+  }
+  const w = x1 - x0 + 1, h = y1 - y0 + 1;
+  if (f.n < BITMAP_MIN_CELLS || w * h > BITMAP_MAX_PIXELS) { bitmapCache.set(f, null); return null; }
+  const cols = TYPES.flatMap(t => [rgbaOf(pal.off[t]), rgbaOf(pal.on[t])]);
+  const img = new ImageData(w, h);
+  const px = new Uint32Array(img.data.buffer);
+  const little = new Uint8Array(new Uint32Array([1]).buffer)[0] === 1;
+  const packed = cols.map(([r, g, b, a]) => (little ? ((a << 24) | (b << 16) | (g << 8) | r) : ((r << 24) | (g << 16) | (b << 8) | a)) >>> 0);
+  for (let i = 0; i < f.n; i++) px[(f.ys[i] - y0) * w + (f.xs[i] - x0)] = packed[f.kind[i]];
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d')!.putImageData(img, 0, 0);
+  const bm = { pal, canvas, x0, y0, w, h };
+  bitmapCache.set(f, bm);
+  return bm;
+}
+
+function drawSimple(
+  ctx: CanvasRenderingContext2D, f: Flat, cam: Camera, viewW: number, viewH: number, pal: Palette,
+): void {
+  const z = cam.zoom;
+  const bm = bitmapOf(f, pal);
+  if (bm) {
+    // Sichtbarer Ausschnitt in Zellen, auf ganze Zellen aufgerundet
+    const sx = Math.max(0, Math.floor(cam.x - bm.x0));
+    const sy = Math.max(0, Math.floor(cam.y - bm.y0));
+    const ex = Math.min(bm.w, Math.ceil(cam.x + viewW / z - bm.x0));
+    const ey = Math.min(bm.h, Math.ceil(cam.y + viewH / z - bm.y0));
+    if (ex > sx && ey > sy) {
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(bm.canvas, sx, sy, ex - sx, ey - sy,
+        (bm.x0 + sx - cam.x) * z, (bm.y0 + sy - cam.y) * z, (ex - sx) * z, (ey - sy) * z);
+      ctx.restore();
+    }
+    return;
+  }
+  const dpr = ctx.getTransform().a || 1;
+  const sn = (v: number) => Math.round(v * dpr) / dpr;
+  const minSide = 1 / dpr; // mindestens ein Geräte-Pixel, sonst verschwinden Zellen
+  const paths: (Path2D | undefined)[] = [];
+  for (let i = 0; i < f.n; i++) {
+    const l = (f.xs[i] - cam.x) * z, t = (f.ys[i] - cam.y) * z;
+    if (l + z < 0 || t + z < 0 || l > viewW || t > viewH) continue;
+    const L = sn(l), T = sn(t);
+    const k = f.kind[i];
+    (paths[k] ??= new Path2D()).rect(L, T, Math.max(sn(l + z) - L, minSide), Math.max(sn(t + z) - T, minSide));
+  }
+  for (let k = 0; k < paths.length; k++) {
+    const p = paths[k];
+    if (!p) continue;
+    const type = TYPES[k >> 1];
+    ctx.fillStyle = (k & 1) ? pal.on[type] : pal.off[type];
+    ctx.fill(p);
+  }
+}
+
 /** Rechteck mit je Ecke eigenem Radius k = [oben-links, oben-rechts, unten-rechts, unten-links] */
 function roundedPath(
   ctx: CanvasRenderingContext2D,
@@ -60,6 +188,34 @@ function drawForcedBadge(
 }
 
 /**
+ * Alle Zellen als Farbflächen in eine Übersicht (Minimap): Zelle (x, y) landet bei
+ * (ox + (x - minX) * s, oy + (y - minY) * s), s Pixel pro Zelle. Bei großen Grids ein
+ * einziges drawImage mit dem gemerkten Bitmap, sonst eine kleine Schleife über die
+ * flachen Arrays — beides ohne die Grid-Schlüssel neu zu zerlegen.
+ */
+export function drawOverview(
+  ctx: CanvasRenderingContext2D, grid: Grid, minX: number, minY: number, s: number, ox: number, oy: number,
+): void {
+  const pal = getCellPalette();
+  const f = flatOf(grid);
+  const bm = bitmapOf(f, pal);
+  if (bm) {
+    ctx.save();
+    ctx.imageSmoothingEnabled = s < 1;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(bm.canvas, ox + (bm.x0 - minX) * s, oy + (bm.y0 - minY) * s, bm.w * s, bm.h * s);
+    ctx.restore();
+    return;
+  }
+  const cs = Math.max(1, s);
+  for (let i = 0; i < f.n; i++) {
+    const k = f.kind[i], type = TYPES[k >> 1];
+    ctx.fillStyle = (k & 1) ? pal.on[type] : pal.off[type];
+    ctx.fillRect(ox + (f.xs[i] - minX) * s, oy + (f.ys[i] - minY) * s, cs, cs);
+  }
+}
+
+/**
  * Zeichnet eine Menge von Zellen in Form und Farbe von CELL_STYLE
  * (siehe cellStyle.ts). Genutzt von renderFrame (Grid-Zellen) UND
  * renderSelectionOverlay (Buffer-Zellen einer schwebenden Selektion).
@@ -81,6 +237,7 @@ function drawCells(
   s: Readonly<CellStyle> = CELL_STYLE,
   pal: Palette = getCellPalette(),
 ): void {
+  if (cam.zoom < SIMPLE_ZOOM) { drawSimple(ctx, flatFromCells(cells), cam, viewW, viewH, pal); return; }
   const has = (x: number, y: number) => typeAt(x, y) !== undefined;
   const z   = cam.zoom;
   const dpr = ctx.getTransform().a || 1;
@@ -259,6 +416,8 @@ export function renderFrame(
     ctx.strokeStyle = pal.grid;      ctx.stroke(minor);
     ctx.strokeStyle = pal.gridMajor; ctx.stroke(major);
   }
+
+  if (z < SIMPLE_ZOOM) { drawSimple(ctx, flatOf(grid), cam, width, height, pal); return; }
 
   const cells: DrawableCell[] = [];
   for (const [k, cell] of grid) {

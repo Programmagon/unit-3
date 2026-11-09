@@ -29,6 +29,11 @@ export const en: Record<TKey, string> = {
   'keys.group.sim': 'Simulation',
   'keys.group.edit': 'Edit',
   'keys.group.selection': 'Selection',
+  'keys.group.view': 'View',
+  'view.minimap': 'Show/hide minimap',
+  'view.fit': 'Show all',
+  'view.overviewHint': 'Overview: zoom in to edit.',
+  'minimap.label': 'Overview. Tap or drag to move the view.',
   'keys.change': 'Change',
   'keys.changeAria': 'Change key for “{action}”',
   'keys.press': 'Press a key …',
@@ -48,6 +53,7 @@ export const en: Record<TKey, string> = {
   'tool.delay': 'Delay',
   'tool.delete': 'Erase',
   'tool.select': 'Select',
+  'tool.power': 'Power',
 
   // ── Bar ────────────────────────────────────────────────────────────
   'bar.undo': 'Undo',
@@ -87,6 +93,9 @@ export const en: Record<TKey, string> = {
   'hint.placeSwap':
     'Click: place a cell · Click the same type again: toggle ⊕ (touch: erase the cell) · Right-click: erase · ' +
     'Long press: toggle ⊕ · Alt+drag: pan · Mouse wheel or two-finger gesture: zoom',
+  'hint.power':
+    'Tap or swipe over cells: set or remove ⊕ (locked on). The first cell you touch decides whether it sets or removes. ' +
+    'Zoom: two-finger gesture.',
   'hint.select':
     'Drag: select an area (replaces the previous selection) · Drag the selection: move · ' +
     '{rotate}: rotate · {flip}: flip · Arrow keys: move by one cell · ' +
@@ -154,6 +163,10 @@ export const en: Record<TKey, string> = {
   'set.glow': 'Glow',
   'set.glowHint': 'Applies to the dark color scheme only.',
   'set.grid': 'Grid',
+  'set.minimap': 'Minimap',
+  'set.minimapHint':
+    'Overview of all cells at the bottom left, with the visible area. Tap or drag inside it to move the view. ' +
+    'Hidden on small screens.',
   'set.offTone': 'Off colors',
   'set.offTone.original': 'Original',
   'set.offTone.originalTitle': 'Fixed theme colors',

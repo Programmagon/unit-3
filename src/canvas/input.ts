@@ -2,12 +2,14 @@
 import type { Grid, CellType } from "../simulation/types";
 import { key } from "../simulation/grid";
 import {
+  EDIT_MIN_ZOOM,
   getCellAt,
   clientToCanvas,
   type Camera,
 } from "./coordinates";
 
-export type Tool = CellType | "delete" | "select";
+/** power = Force (⊕, Dauer-AN) setzen/entfernen; vor allem für Touch gedacht */
+export type Tool = CellType | "delete" | "select" | "power";
 
 // ─── applyTool ────────────────────────────────────────────────────────
 // Hinweis: aktuell ungenutzt (Canvas.tsx implementiert die Platzier-Logik
@@ -285,6 +287,9 @@ export class PointerController {
     // Rechtsklick-Löschen und Long-Press-Löschen, daher genügt der einfache
     // Vorrang hier, ohne diese anderen Zweige einzeln absichern zu müssen.
     if (this.getTool() === null) return true;
+    // Übersicht (weit herausgezoomt): Platzier-Werkzeuge sind aus, Ziehen verschiebt
+    // die Ansicht. Nur die Auswahl funktioniert weiter (großen Bereich markieren).
+    if (this.getTool() !== "select" && this.getCamera().zoom < EDIT_MIN_ZOOM) return true;
     // Alt+Drag pannt jetzt einheitlich bei JEDEM Werkzeug, auch "select" —
     // das neue Selektionsmodell (State Machine, siehe canvas/selection.ts)
     // kennt kein Hinzufügen/Abziehen per Modifier-Taste mehr (jede neue
@@ -343,7 +348,7 @@ export class PointerController {
     // den generischen isDragging-Pfad und setzt isDeleting nie — deshalb
     // zusätzlich getTool() prüfen, sonst wird auf Mobile beim Löschen
     // trotzdem gestraightet.
-    const deleting = this.isDeleting || this.getTool() === "delete";
+    const deleting = this.isDeleting || this.getTool() === "delete" || this.getTool() === "power";
     if (!deleting && this.anchorCell !== null) {
       // Einstellung "Gerade Linie": automatisch, nie, oder nur solange die
       // Umschalttaste gehalten wird. Ist der Lock nicht erlaubt, wird auch eine
@@ -500,7 +505,9 @@ export class PointerController {
       const [cx, cy] = this.cellAt(e.clientX, e.clientY);
       const swap =
         this.getOptions().touchTap === "delete" && this.getTool() !== "delete";
-      this.longPressTimer = setTimeout(() => {
+      // Mit dem Power-Werkzeug gibt es kein Long-Press: Tippen und Wischen setzen ⊕, Löschen
+      // läge sonst eine Berührung daneben.
+      if (this.getTool() !== "power") this.longPressTimer = setTimeout(() => {
         if (!this.isDragging) {
           this.cancelLongPress();
           if (swap) {

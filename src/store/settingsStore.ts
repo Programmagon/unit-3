@@ -43,6 +43,8 @@ export interface Settings {
   language: LangPref;
   /** Kürzel an den Knöpfen zeigen: automatisch (Maus oder erkannte Hardware-Tastatur), immer, nie */
   keyHints: KeyHints;
+  /** Minimap (Übersicht unten links im Canvas) */
+  minimap: boolean;
   /** Arbeitsstand automatisch im Browser sichern und beim Start wiederherstellen */
   autosave: boolean;
 }
@@ -82,6 +84,7 @@ function sanitize(raw: unknown): Overrides {
   const hints = pick(r.keyHints, ['auto', 'on', 'off'] as const);
   if (hints !== undefined) o.keyHints = hints;
   if (typeof r.autosave === 'boolean') o.autosave = r.autosave;
+  if (typeof r.minimap === 'boolean') o.minimap = r.minimap;
   return o;
 }
 
@@ -113,6 +116,7 @@ function defaultsFor(look: LookId): Settings {
     language: 'auto',
     keyHints: 'auto',
     autosave: true,
+    minimap: true,
   };
 }
 

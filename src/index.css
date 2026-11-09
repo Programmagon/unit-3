@@ -724,3 +724,50 @@ html[data-keyhints='on'] .btn[data-key]::after {
   .keys-row { grid-template-columns: minmax(0, 1fr) auto; }
   .keys-row .btn { grid-column: auto; }
 }
+
+/* ── Minimap ───────────────────────────────────────────────────── */
+/* Unten links im Canvas; die Auswahl-Leiste sitzt mittig darüber und umbricht bei Platzmangel. */
+.minimap {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 10;
+  background: color-mix(in srgb, var(--bg-ui) 85%, transparent);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-ui);
+  box-shadow: var(--shadow-float);
+  touch-action: none;
+  cursor: crosshair;
+}
+/* .canvas-area canvas { display: block } ist spezifischer als .minimap allein */
+@media (max-width: 599px) { .canvas-area .minimap { display: none; } }
+
+/* ── Ansicht: Alles anzeigen, Übersichts-Hinweis, Power-Werkzeug ─── */
+.view-fit {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 10;
+  background: color-mix(in srgb, var(--bg-ui) 85%, transparent);
+}
+.overview-hint {
+  display: none;
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 140px);
+  padding: 2px 10px;
+  text-align: center;
+  font-size: var(--fs-xs);
+  color: var(--text);
+  background: color-mix(in srgb, var(--bg-ui) 90%, transparent);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-ui);
+  pointer-events: none;
+  z-index: 10;
+}
+.canvas-area:has(canvas[data-overview='true']) .overview-hint { display: block; }
+/* Das Power-Werkzeug braucht man nur ohne Maus (dort genügt Klick auf gleichen Typ) */
+.touch-only { display: none; }
+@media (pointer: coarse), (max-width: 599px) { .touch-only { display: inline-flex; } }

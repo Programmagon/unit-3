@@ -3,6 +3,7 @@ import { useUIStore }        from './uiStore';
 import { useGridStore }      from './gridStore';
 import { useSelectionStore } from './selectionStore';
 import { useKeymapStore } from './keymapStore';
+import { useSettingsStore } from './settingsStore';
 import { comboFromEvent } from '../lib/keymap';
 
 /** Pfeiltaste → Delta einer Zelle, für die Selektions-Nudge weiter unten. */
@@ -29,7 +30,10 @@ const ARROW_DELTA: Record<string, [number, number]> = {
  *   nicht jeder Aufrufer Zugriff auf den Canvas hat — ohne Angabe fügt
  *   Strg+V bei (0,0) ein.
  */
-export function useKeyboardShortcuts(getPasteAnchor?: () => [number, number] | null) {
+export function useKeyboardShortcuts(
+  getPasteAnchor?: () => [number, number] | null,
+  getFitView?: () => void,
+) {
   const tool       = useUIStore(s => s.tool);
   const setTool    = useUIStore(s => s.setTool);
   const step       = useGridStore(s => s.step);
@@ -113,6 +117,7 @@ export function useKeyboardShortcuts(getPasteAnchor?: () => [number, number] | n
         case 'toolInverter': if (tool === 'select') releaseSelectionForToolSwitch(); setTool('inverter'); break;
         case 'toolDelay':    if (tool === 'select') releaseSelectionForToolSwitch(); setTool('delay'); break;
         case 'toolErase':    if (tool === 'select') releaseSelectionForToolSwitch(); setTool('delete'); break;
+        case 'toolPower':    if (tool === 'select') releaseSelectionForToolSwitch(); setTool('power'); break;
         case 'toolSelect':
           // Entspricht dem Toggle-Verhalten des Werkzeug-Buttons in
           // Toolbar.tsx: erneutes Aktivieren eines aktiven Werkzeugs schaltet es aus.
@@ -135,6 +140,18 @@ export function useKeyboardShortcuts(getPasteAnchor?: () => [number, number] | n
             step();
           }
           break;
+
+        case 'fitView':
+          e.preventDefault();
+          if (!e.repeat) getFitView?.();
+          break;
+        case 'toggleMinimap': {
+          e.preventDefault();
+          if (e.repeat) break;
+          const st = useSettingsStore.getState();
+          st.setSetting('minimap', !st.settings.minimap);
+          break;
+        }
 
         case 'undo': e.preventDefault(); undo(); break;
         case 'redo': e.preventDefault(); redo(); break;
@@ -164,6 +181,6 @@ export function useKeyboardShortcuts(getPasteAnchor?: () => [number, number] | n
     selection, clipboard, hasSelection, getPasteAnchor,
     copySelection, cutSelection, pasteClipboard, duplicateSelection,
     deleteSelectionContents, rotateSelection, flipSelection, nudgeSelection,
-    commitFloating, clearSelection, escapeSelection,
+    commitFloating, clearSelection, escapeSelection, getFitView,
   ]);
 }

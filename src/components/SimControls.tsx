@@ -31,6 +31,7 @@ export function SimControls() {
         flip:   `${keys.label('flipH')} / ${keys.label('flipV')}`,
         clip:   ['copy', 'cut', 'paste', 'duplicate'].map(a => keys.label(a as 'copy')).join(' / '),
       })
+    : tool === 'power' ? t('hint.power')
     : touchTap === 'delete' ? t('hint.placeSwap') : t('hint.place');
 
   return (

@@ -7,6 +7,8 @@ import { SimControls }  from './components/SimControls';
 import { SelectionActions } from './components/SelectionActions';
 import { SettingsMenu } from './components/SettingsMenu';
 import { ProjectsPanel } from './components/ProjectsPanel';
+import { Minimap } from './components/Minimap';
+import { ViewControls } from './components/ViewControls';
 import { useGridStore } from './store/gridStore';
 import { useSelectionStore } from './store/selectionStore';
 import { useKeyboardShortcuts } from './store/useKeyboardShortcuts';
@@ -39,7 +41,8 @@ export default function App() {
   // (statt (0,0), was je nach Kameraposition weit außerhalb des Sichtbaren
   // liegen kann).
   useKeyboardShortcuts(() =>
-    canvasRef.current?.getLastPointerCell() ?? canvasRef.current?.getViewportCenterCell() ?? null
+    canvasRef.current?.getLastPointerCell() ?? canvasRef.current?.getViewportCenterCell() ?? null,
+    () => canvasRef.current?.fitView(),
   );
 
   // Projekte: Kamera anmelden, letzten Arbeitsstand wiederherstellen, Autosave starten.
@@ -165,6 +168,8 @@ export default function App() {
         <div className="step-overlay">
           {t('status.overlay', { steps, cells })}
         </div>
+        <Minimap canvas={canvasRef} />
+        <ViewControls canvas={canvasRef} />
         <SettingsMenu />
         <ProjectsPanel />
       </div>

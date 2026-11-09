@@ -38,6 +38,8 @@ export {
   TriangleAlert as IconWarning,
   Settings as IconSettings,
   Archive as IconProjects,
+  CirclePlus as IconPower,
+  Maximize as IconFit,
   Pencil as IconRename,
   Plus as IconPlus,
   MessageSquareText as IconFeedback,

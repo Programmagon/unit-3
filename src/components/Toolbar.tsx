@@ -12,6 +12,7 @@ import {
   IconDelay,
   IconErase,
   IconSelect,
+  IconPower,
 } from "./icons";
 
 const TOOLS: {
@@ -25,6 +26,8 @@ const TOOLS: {
   { id: "inverter", Icon: IconInverter, label: "tool.inverter",   action: "toolInverter", cls: "btn--tool btn--inv" },
   { id: "delay",    Icon: IconDelay,    label: "tool.delay", action: "toolDelay", cls: "btn--tool btn--delay" },
   { id: "delete",   Icon: IconErase,    label: "tool.delete",    action: "toolErase", cls: "btn--danger" },
+  // Nur auf Touch-Geräten und schmalen Bildschirmen sichtbar (.touch-only); Taste P gilt überall.
+  { id: "power",    Icon: IconPower,    label: "tool.power",     action: "toolPower",    cls: "touch-only" },
   { id: "select",   Icon: IconSelect,   label: "tool.select",  action: "toolSelect", cls: "" },
 ];
 

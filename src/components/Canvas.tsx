@@ -5,7 +5,7 @@ import { useSelectionStore } from '../store/selectionStore';
 import { useSettingsStore }  from '../store/settingsStore';
 import { renderFrame, renderSelectionOverlay } from '../canvas/renderer';
 import { PointerController } from '../canvas/input';
-import { zoomAtPoint, getCellAt } from '../canvas/coordinates';
+import { zoomAtPoint, getCellAt, clampZoom, MIN_ZOOM, EDIT_MIN_ZOOM } from '../canvas/coordinates';
 import type { Camera }       from '../canvas/coordinates';
 import type { Tool }         from '../canvas/input';
 import type { SelectionState } from '../canvas/selection';
@@ -36,6 +36,12 @@ export interface CanvasHandle {
    * vorhersagbare, immer sichtbare Ankerpunkt.
    */
   getViewportCenterCell: () => [number, number];
+  /** Sichtbare Canvas-Größe in CSS-Pixeln (für die Minimap). */
+  getViewSize: () => { w: number; h: number };
+  /** Zoom und Position so wählen, dass alle Zellen im Bild sind (leer: Startansicht). */
+  fitView: () => void;
+  /** Verschiebt die Kamera so, dass der Weltpunkt (wx, wy) in der Bildmitte liegt (Minimap). */
+  centerOn: (wx: number, wy: number) => void;
 }
 
 export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
@@ -54,7 +60,7 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
   useImperativeHandle(ref, () => ({
     getCameraSnapshot: () => ({ ...cameraRef.current }),
     setCameraSnapshot: (cam: Camera) => {
-      cameraRef.current = { ...cam };
+      cameraRef.current = { ...cam, zoom: clampZoom(cam.zoom) };
       dirtyRef.current  = true;
     },
     getLastPointerCell: () => {
@@ -69,6 +75,43 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
       const rect = c.getBoundingClientRect();
       return getCellAt(rect.left + rect.width / 2, rect.top + rect.height / 2, c, cameraRef.current);
     },
+    getViewSize: () => {
+      const c = canvasRef.current;
+      return { w: c?.clientWidth ?? 0, h: c?.clientHeight ?? 0 };
+    },
+    fitView: () => {
+      const c = canvasRef.current;
+      if (!c) return;
+      const g = gridRef.current;
+      if (g.size === 0) { cameraRef.current = { ...INITIAL_CAMERA }; dirtyRef.current = true; return; }
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const k of g.keys()) {
+        const i = k.indexOf(',');
+        const x = +k.slice(0, i), y = +k.slice(i + 1);
+        if (x < x0) x0 = x;
+        if (y < y0) y0 = y;
+        if (x + 1 > x1) x1 = x + 1;
+        if (y + 1 > y1) y1 = y + 1;
+      }
+      const pad = 2;
+      const w = x1 - x0 + 2 * pad, h = y1 - y0 + 2 * pad;
+      // Nicht größer als die Startansicht: eine einzelne Zelle soll nicht den Bildschirm füllen
+      const zoom = Math.max(MIN_ZOOM, Math.min(INITIAL_CAMERA.zoom, c.clientWidth / w, c.clientHeight / h));
+      cameraRef.current = {
+        zoom,
+        x: (x0 + x1) / 2 - c.clientWidth / zoom / 2,
+        y: (y0 + y1) / 2 - c.clientHeight / zoom / 2,
+      };
+      dirtyRef.current = true;
+    },
+    centerOn: (wx, wy) => {
+      const c = canvasRef.current;
+      if (!c) return;
+      const cam = cameraRef.current;
+      cam.x = wx - c.clientWidth / cam.zoom / 2;
+      cam.y = wy - c.clientHeight / cam.zoom / 2;
+      dirtyRef.current = true;
+    },
   }), []);
 
   // ── Grid aus Zustand (nur für Platzieren/Löschen nötig) ───────────────
@@ -79,6 +122,7 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
   const pushUndo     = useGridStore(s => s.pushUndo);
   const beginBatch   = useGridStore(s => s.beginBatch);
   const endBatch     = useGridStore(s => s.endBatch);
+  const powerTargetRef = useRef<boolean | null>(null);
   const gridRef      = useRef(grid);
   gridRef.current    = grid; // immer aktuell für Event-Handler
 
@@ -106,6 +150,8 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
     const ctx = c.getContext('2d')!;
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Übersicht (weit herausgezoomt, Bearbeiten aus): CSS blendet den Hinweis ein (ViewControls)
+    c.dataset.overview = cameraRef.current.zoom < EDIT_MIN_ZOOM ? 'true' : 'false';
     renderFrame(ctx, gridRef.current, cameraRef.current, c.clientWidth, c.clientHeight);
     renderSelectionOverlay(ctx, selectionRef.current, cameraRef.current);
   }, []); // keine Deps — liest aus stabilen Refs
@@ -174,6 +220,22 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
           if (t === 'select' || t === null) return;
           if (t === 'delete') { delCell(cx, cy); return; }
 
+          // Power-Werkzeug: ⊕ (Force) setzen/entfernen. Der erste Berührungspunkt entscheidet beim Wischen,
+          // ob gesetzt oder entfernt wird; alle weiteren Zellen im Zug folgen diesem Ziel. Leere Zellen
+          // bleiben leer (das Werkzeug platziert nichts).
+          if (t === 'power') {
+            // Frisch aus dem Store: gridRef hängt bis zum nächsten Render hinterher, ein Zug trifft viele Zellen
+            const cell = useGridStore.getState().grid.get(k);
+            if (!isDrag) {
+              if (cell) { toggleForced(cx, cy); powerTargetRef.current = !cell.forced; }
+              else powerTargetRef.current = null;
+            } else if (cell) {
+              if (powerTargetRef.current === null) powerTargetRef.current = !cell.forced;
+              if (!!cell.forced !== powerTargetRef.current) toggleForced(cx, cy);
+            }
+            return;
+          }
+
           if (!g.has(k)) {
             setCell(cx, cy, t);
           } else if (!isDrag) {
@@ -226,6 +288,7 @@ export const Canvas = forwardRef<CanvasHandle, object>((_props, ref) => {
 
         onDragEnd: () => {
           endBatch();
+          powerTargetRef.current = null;
         },
 
         // ─── Selektions-Werkzeug ──────────────────────────────────────

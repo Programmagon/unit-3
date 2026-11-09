@@ -154,7 +154,7 @@ function SettingsContent() {
 
       <Section
         title={t('set.sec.appearance')}
-        onReset={() => { setThemePref('auto'); reset([...TWEAK_KEYS]); }}
+        onReset={() => { setThemePref('auto'); reset([...TWEAK_KEYS, 'minimap']); }}
       >
         <Segmented<ThemePref>
           label={t('set.scheme')}
@@ -185,6 +185,13 @@ function SettingsContent() {
           value={settings.grid}
           options={onOff}
           onChange={set('grid')}
+        />
+        <Segmented<boolean>
+          label={t('set.minimap')}
+          value={settings.minimap}
+          options={onOff}
+          onChange={set('minimap')}
+          hint={t('set.minimapHint')}
         />
         <Segmented<string | null>
           label={t('set.offTone')}

@@ -34,6 +34,11 @@ export const de = {
   'keys.group.sim': 'Simulation',
   'keys.group.edit': 'Bearbeiten',
   'keys.group.selection': 'Auswahl',
+  'keys.group.view': 'Ansicht',
+  'view.minimap': 'Minimap ein-/ausblenden',
+  'view.fit': 'Alles anzeigen',
+  'view.overviewHint': 'Übersicht: Zum Bearbeiten näher heranzoomen.',
+  'minimap.label': 'Übersicht. Tippen oder Ziehen verschiebt die Ansicht.',
   'keys.change': 'Ändern',
   'keys.changeAria': 'Taste für „{action}“ ändern',
   'keys.press': 'Taste drücken …',
@@ -53,6 +58,7 @@ export const de = {
   'tool.delay': 'Verzögerer',
   'tool.delete': 'Löschen',
   'tool.select': 'Auswählen',
+  'tool.power': 'Power',
 
   // ── Leiste ─────────────────────────────────────────────────────────
   'bar.undo': 'Rückgängig',
@@ -92,6 +98,9 @@ export const de = {
   'hint.placeSwap':
     'Klicken: Zelle setzen · Erneut auf denselben Typ: ⊕ umschalten (Touch: Zelle löschen) · Rechtsklick: Löschen · ' +
     'Langes Drücken: ⊕ umschalten · Alt+Ziehen: Ansicht verschieben · Mausrad oder Zwei-Finger-Geste: Zoom',
+  'hint.power':
+    'Tippen oder Wischen über Zellen: ⊕ (Dauer-AN) setzen oder entfernen. Der erste berührte Punkt bestimmt, ob gesetzt oder entfernt wird. ' +
+    'Zoom: Zwei-Finger-Geste.',
   'hint.select':
     'Ziehen: Bereich auswählen (ersetzt die vorherige Auswahl) · Auswahl ziehen: verschieben · ' +
     '{rotate}: drehen · {flip}: spiegeln · Pfeiltasten: um eine Zelle verschieben · ' +
@@ -159,6 +168,10 @@ export const de = {
   'set.glow': 'Leuchten',
   'set.glowHint': 'Wirkt nur im dunklen Farbschema.',
   'set.grid': 'Raster',
+  'set.minimap': 'Minimap',
+  'set.minimapHint':
+    'Übersicht aller Zellen unten links mit dem sichtbaren Ausschnitt. Tippen oder Ziehen darin verschiebt die Ansicht. ' +
+    'Auf kleinen Bildschirmen ausgeblendet.',
   'set.offTone': 'Aus-Farben',
   'set.offTone.original': 'Original',
   'set.offTone.originalTitle': 'Feste Farben aus dem Theme',
